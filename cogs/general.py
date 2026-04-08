@@ -67,6 +67,18 @@ class General(commands.Cog):
             ),
             inline=False,
         )
+        embed.add_field(
+            name="Anniversaires",
+            value=(
+                "`/anniversaire enregistrer <jour> <mois>` — Enregistrer votre anniversaire\n"
+                "`/anniversaire supprimer` — Supprimer votre anniversaire\n"
+                "`/anniversaire prochains` — Voir les prochains anniversaires\n"
+                "`/anniversaire configurer #salon [message]` — Configurer le salon (admin)\n"
+                "`/anniversaire tester` — Prévisualiser le message (admin)\n"
+                "`/anniversaire statut` — Voir la configuration (admin)"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="R2D12 • Beep boop !")
         await interaction.response.send_message(embed=embed)
 
