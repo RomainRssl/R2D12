@@ -22,6 +22,17 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.templates")
         await self.load_extension("cogs.welcome")
         await self.load_extension("cogs.birthday")
+        await self.load_extension("cogs.logs")
+        await self.load_extension("cogs.autoroles")
+        await self.load_extension("cogs.reactionroles")
+        await self.load_extension("cogs.polls")
+        await self.load_extension("cogs.suggestions")
+        await self.load_extension("cogs.levels")
+        await self.load_extension("cogs.economy")
+        await self.load_extension("cogs.giveaways")
+        await self.load_extension("cogs.tickets")
+        await self.load_extension("cogs.scheduled")
+        await self.load_extension("cogs.counters")
 
         # Sync les slash commands sur le serveur de test si GUILD_ID défini,
         # sinon sync global (peut prendre jusqu'à 1h)

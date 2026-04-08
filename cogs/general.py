@@ -79,6 +79,126 @@ class General(commands.Cog):
             ),
             inline=False,
         )
+        embed.add_field(
+            name="Modération avancée",
+            value=(
+                "`/warn @membre [raison]` — Avertir un membre\n"
+                "`/warnings @membre` — Voir les avertissements\n"
+                "`/clearwarnings @membre` — Effacer les avertissements\n"
+                "`/mute @membre [minutes] [raison]` — Mettre en sourdine\n"
+                "`/unmute @membre` — Retirer la sourdine\n"
+                "`/unban <user_id>` — Débannir"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Logs",
+            value=(
+                "`/logs configurer #salon` — Définir le salon de logs\n"
+                "`/logs désactiver` — Désactiver les logs\n"
+                "`/logs statut` — Voir la configuration"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Rôles automatiques",
+            value=(
+                "`/autorole ajouter @role` — Ajouter un rôle automatique\n"
+                "`/autorole retirer @role` — Retirer un rôle automatique\n"
+                "`/autorole liste` — Voir les rôles configurés"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Rôles réactions",
+            value=(
+                "`/rolerole créer #salon <titre> <desc>` — Créer un panneau\n"
+                "`/rolerole ajouter <msg_id> @role <label>` — Ajouter un bouton\n"
+                "`/rolerole supprimer <msg_id>` — Supprimer un panneau"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Sondages",
+            value=(
+                "`/sondage <question> <opt1> <opt2> [opt3-5] [durée_h]` — Créer un sondage\n"
+                "`/sondage-terminer <msg_id>` — Terminer un sondage"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Suggestions",
+            value=(
+                "`/suggestion configurer #salon` — Configurer le salon\n"
+                "`/suggestion soumettre <texte>` — Soumettre une suggestion\n"
+                "`/suggestion accepter <msg_id>` — Accepter (admin)\n"
+                "`/suggestion refuser <msg_id>` — Refuser (admin)"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Niveaux & XP",
+            value=(
+                "`/niveau [@membre]` — Voir son niveau\n"
+                "`/classement` — Top 10 XP\n"
+                "`/niveau configurer #salon` — Salon de level up (admin)\n"
+                "`/niveau recompense-ajouter <n> @role` — Ajouter récompense\n"
+                "`/niveau recompense-retirer <n>` — Retirer récompense\n"
+                "`/niveau recompense-liste` — Voir les récompenses"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Économie",
+            value=(
+                "`/argent [@membre]` — Voir son solde\n"
+                "`/daily` — Récompense quotidienne\n"
+                "`/donner @membre <montant>` — Transférer de l'argent\n"
+                "`/classement-argent` — Top 10 richesse\n"
+                "`/inventaire [@membre]` — Voir son inventaire\n"
+                "`/boutique liste` — Voir la boutique\n"
+                "`/boutique ajouter/retirer/acheter` — Gérer les articles"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Giveaways",
+            value=(
+                "`/giveaway lancer #salon <durée_h> <prix>` — Lancer un giveaway\n"
+                "`/giveaway terminer <msg_id>` — Terminer manuellement\n"
+                "`/giveaway relancer <msg_id>` — Re-roll les gagnants\n"
+                "`/giveaway liste` — Giveaways en cours"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Tickets",
+            value=(
+                "`/ticket configurer #catégorie @role` — Configurer les tickets\n"
+                "`/ticket panel #salon` — Envoyer le bouton d'ouverture\n"
+                "`/ticket fermer` — Fermer le ticket actuel\n"
+                "`/ticket ajouter @membre` — Ajouter quelqu'un au ticket"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Messages planifiés",
+            value=(
+                "`/planifié créer <nom> #salon <message> <heures>` — Créer\n"
+                "`/planifié supprimer <nom>` — Supprimer\n"
+                "`/planifié liste` — Voir les messages planifiés"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Compteurs",
+            value=(
+                "`/compteur créer <type>` — Créer un compteur vocal (membres/bots/salons/boosts)\n"
+                "`/compteur supprimer <type>` — Supprimer un compteur\n"
+                "`/compteur liste` — Voir les compteurs actifs"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="R2D12 • Beep boop !")
         await interaction.response.send_message(embed=embed)
 
