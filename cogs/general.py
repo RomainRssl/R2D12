@@ -199,6 +199,40 @@ class General(commands.Cog):
             ),
             inline=False,
         )
+        embed.add_field(
+            name="🏎️ SimRacing — Temps au tour",
+            value=(
+                "`/temps enregistrer <voiture> <piste> <temps>` — Enregistrer un temps\n"
+                "`/temps classement <voiture> <piste>` — Leaderboard\n"
+                "`/temps personnel [@membre]` — Voir ses meilleurs temps\n"
+                "`/temps supprimer <voiture> <piste>` — Supprimer son temps"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🏎️ SimRacing — Sessions",
+            value=(
+                "`/session créer <titre> <date> <heure> <sim> <piste>` — Organiser une session\n"
+                "`/session liste` — Prochaines sessions\n"
+                "`/session info <id>` — Détails d'une session\n"
+                "`/session annuler <id>` — Annuler une session\n"
+                "`/session configurer #salon` — Salon des rappels (admin)"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🏎️ SimRacing — Championnats",
+            value=(
+                "`/championnat créer <nom> <points>` — Créer un championnat\n"
+                "`/championnat résultat <nom> <manche>` — Enregistrer les résultats\n"
+                "`/championnat classement <nom>` — Voir le classement\n"
+                "`/championnat calendrier <nom>` — Voir les manches\n"
+                "`/championnat liste` — Tous les championnats\n"
+                "`/incident signaler @pilote <raison>` — Signaler un incident\n"
+                "`/incident pénalité @pilote <type> <raison>` — Appliquer une pénalité"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="R2D12 • Beep boop !")
         await interaction.response.send_message(embed=embed)
 
