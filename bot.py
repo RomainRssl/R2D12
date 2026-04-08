@@ -19,6 +19,8 @@ class R2D12(commands.Bot):
     async def setup_hook(self):
         await self.load_extension("cogs.general")
         await self.load_extension("cogs.moderation")
+        await self.load_extension("cogs.templates")
+        await self.load_extension("cogs.welcome")
 
         # Sync les slash commands sur le serveur de test si GUILD_ID défini,
         # sinon sync global (peut prendre jusqu'à 1h)

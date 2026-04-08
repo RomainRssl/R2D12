@@ -46,6 +46,27 @@ class General(commands.Cog):
             ),
             inline=False,
         )
+        embed.add_field(
+            name="Templates & Annonces",
+            value=(
+                "`/template créer <nom> <message>` — Créer un template avec `{variables}`\n"
+                "`/template utiliser <nom> [#salon]` — Utiliser un template (formulaire)\n"
+                "`/template liste` — Voir tous les templates\n"
+                "`/template supprimer <nom>` — Supprimer un template\n"
+                "`/annonce #salon <titre> <message>` — Envoyer une annonce formatée"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Bienvenue",
+            value=(
+                "`/bienvenue configurer #salon [message]` — Configurer le message d'accueil\n"
+                "`/bienvenue tester` — Prévisualiser le message de bienvenue\n"
+                "`/bienvenue statut` — Voir la configuration actuelle\n"
+                "`/bienvenue désactiver` — Désactiver les messages de bienvenue"
+            ),
+            inline=False,
+        )
         embed.set_footer(text="R2D12 • Beep boop !")
         await interaction.response.send_message(embed=embed)
 
