@@ -110,11 +110,20 @@ class General(commands.Cog):
             inline=False,
         )
         embed.add_field(
-            name="Rôles réactions",
+            name="Rôles réactions (boutons)",
             value=(
                 "`/rolerole créer #salon <titre> <desc>` — Créer un panneau\n"
                 "`/rolerole ajouter <msg_id> @role <label>` — Ajouter un bouton\n"
                 "`/rolerole supprimer <msg_id>` — Supprimer un panneau"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Rôles réactions (emoji)",
+            value=(
+                "`/emojirole ajouter <msg_id> <emoji> @role` — Associer un emoji à un rôle sur un message\n"
+                "`/emojirole retirer <msg_id> <emoji>` — Supprimer l'association\n"
+                "`/emojirole liste` — Voir toutes les associations"
             ),
             inline=False,
         )
