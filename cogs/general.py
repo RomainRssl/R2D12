@@ -110,6 +110,17 @@ class General(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="Remplacement de mots",
+            value=(
+                "`/remplacer ajouter <mot> <remplacement>` — Ajouter une règle\n"
+                "`/remplacer retirer <mot>` — Supprimer une règle\n"
+                "`/remplacer liste` — Voir toutes les règles\n"
+                "`/remplacer tester <phrase>` — Tester une phrase\n"
+                "`/remplacer activer / désactiver` — Activer ou désactiver"
+            ),
+            inline=False,
+        )
+        embed.add_field(
             name="Rôles réactions (boutons)",
             value=(
                 "`/rolerole créer #salon <titre> <desc>` — Créer un panneau\n"

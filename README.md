@@ -19,6 +19,7 @@ R2D12 est un bot Discord complet développé en Python avec la bibliothèque `di
    - [Anniversaires](#anniversaires)
    - [Logs d'audit](#logs-daudit)
    - [Rôles automatiques](#rôles-automatiques)
+   - [Remplacement de mots](#remplacement-de-mots)
    - [Rôles réactions — Boutons](#rôles-réactions--boutons)
    - [Rôles réactions — Emoji](#rôles-réactions--emoji)
    - [Sondages](#sondages)
@@ -294,6 +295,34 @@ Attribue automatiquement des rôles à chaque nouveau membre qui rejoint le serv
 | `/autorole ajouter @role` | Ajoute un rôle à la liste des rôles automatiques |
 | `/autorole retirer @role` | Retire un rôle de la liste |
 | `/autorole liste` | Affiche les rôles automatiques configurés |
+
+---
+
+### Remplacement de mots
+
+Remplace automatiquement des mots ou expressions interdits dans les messages des membres. Le message original est supprimé et reposté avec la correction, en conservant le nom et l'avatar de l'auteur.
+
+| Commande | Description |
+|---|---|
+| `/remplacer ajouter <mot> <remplacement>` | Ajoute une règle de remplacement |
+| `/remplacer retirer <mot>` | Supprime une règle |
+| `/remplacer liste` | Affiche toutes les règles et l'état du module |
+| `/remplacer tester <phrase>` | Prévisualise le résultat sans modifier de message |
+| `/remplacer activer` | Active le remplacement automatique |
+| `/remplacer désactiver` | Désactive le remplacement (les règles sont conservées) |
+
+**Exemple :**
+```
+/remplacer ajouter chocolatine pain au chocolat
+```
+Désormais, tout message contenant "chocolatine" (quelle que soit la casse) sera automatiquement corrigé en "pain au chocolat".
+
+**Notes :**
+- La détection est **insensible à la casse** (`CHOCOLATINE`, `Chocolatine`, `chocolatine` → même résultat)
+- Les expressions entières sont supportées (ex : `pain au chocolat viennois` → `viennoiserie correcte`)
+- Les pièces jointes et embeds du message original sont conservés
+- Le bot doit avoir les permissions **Gérer les messages** et **Gérer les webhooks** dans le salon
+- Les données sont sauvegardées dans `data/wordreplace.json`
 
 ---
 
@@ -589,6 +618,7 @@ R2D12/
 │   ├── scheduled.py        # Messages planifiés
 │   ├── counters.py         # Compteurs vocaux
 │   ├── forwarder.py        # Relais de messages
+│   ├── wordreplace.py      # Remplacement automatique de mots
 │   ├── laptimes.py         # Temps au tour SimRacing
 │   ├── sessions.py         # Sessions SimRacing
 │   └── championship.py     # Championnats SimRacing
@@ -598,6 +628,7 @@ R2D12/
     ├── autoroles.json
     ├── reactionroles.json
     ├── emojiroles.json
+    ├── wordreplace.json
     ├── polls.json
     ├── suggestions.json
     ├── levels.json

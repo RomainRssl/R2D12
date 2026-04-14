@@ -37,6 +37,7 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.sessions")
         await self.load_extension("cogs.championship")
         await self.load_extension("cogs.forwarder")
+        await self.load_extension("cogs.wordreplace")
 
         # Sync les slash commands sur le serveur de test si GUILD_ID défini,
         # sinon sync global (peut prendre jusqu'à 1h)
