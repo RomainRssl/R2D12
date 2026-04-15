@@ -137,7 +137,11 @@ class Levels(commands.Cog):
     @app_commands.command(name="classement", description="Top 10 des membres par niveau")
     async def leaderboard(self, interaction: discord.Interaction):
         data = load_data()
-        members_data = data.get(str(interaction.guild_id), {}).get("members", {})
+        guild_data = data.get(str(interaction.guild_id), {})
+        if not guild_data.get("classement_enabled", True):
+            await interaction.response.send_message("Le classement est désactivé sur ce serveur.", ephemeral=True)
+            return
+        members_data = guild_data.get("members", {})
         if not members_data:
             await interaction.response.send_message("Aucun membre avec de l'XP.", ephemeral=True)
             return
@@ -152,6 +156,22 @@ class Levels(commands.Cog):
             prefix = medals[i] if i < 3 else f"`#{i+1}`"
             embed.add_field(name=f"{prefix} {name}", value=f"Niveau {level} • {mdata['xp']} XP", inline=False)
         await interaction.response.send_message(embed=embed)
+
+    @niveau_group.command(name="classement-activer", description="Activer la commande /classement")
+    @app_commands.default_permissions(manage_guild=True)
+    async def classement_enable(self, interaction: discord.Interaction):
+        data = load_data()
+        data.setdefault(str(interaction.guild_id), {"enabled": True, "classement_enabled": True, "channel_id": None, "rewards": {}, "members": {}})["classement_enabled"] = True
+        save_data(data)
+        await interaction.response.send_message("✅ Commande `/classement` **activée**.", ephemeral=True)
+
+    @niveau_group.command(name="classement-désactiver", description="Désactiver la commande /classement")
+    @app_commands.default_permissions(manage_guild=True)
+    async def classement_disable(self, interaction: discord.Interaction):
+        data = load_data()
+        data.setdefault(str(interaction.guild_id), {"enabled": True, "classement_enabled": True, "channel_id": None, "rewards": {}, "members": {}})["classement_enabled"] = False
+        save_data(data)
+        await interaction.response.send_message("❌ Commande `/classement` **désactivée**.", ephemeral=True)
 
     @niveau_group.command(name="activer", description="Activer le système de niveaux et XP")
     @app_commands.default_permissions(manage_guild=True)
