@@ -210,7 +210,6 @@ class LapTimes(commands.Cog):
     # ── Autocomplete ──────────────────────────────────────────────────────────
 
     @laptime_board.autocomplete("voiture")
-    @laptime_personal.autocomplete("voiture")
     @laptime_delete.autocomplete("voiture")
     async def autocomplete_car(self, interaction: discord.Interaction, current: str):
         data = load_data()
