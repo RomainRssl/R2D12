@@ -107,7 +107,7 @@ class Levels(commands.Cog):
                         except discord.Forbidden:
                             pass
 
-    @app_commands.command(name="niveau", description="Voir votre niveau et XP")
+    @niveau_group.command(name="voir", description="Voir votre niveau et XP")
     @app_commands.describe(membre="Le membre dont voir le niveau (vous par défaut)")
     async def niveau_check(self, interaction: discord.Interaction, membre: discord.Member = None):
         membre = membre or interaction.user

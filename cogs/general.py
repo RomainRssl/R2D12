@@ -159,7 +159,7 @@ class General(commands.Cog):
         embed.add_field(
             name="Niveaux & XP",
             value=(
-                "`/niveau [@membre]` — Voir son niveau\n"
+                "`/niveau voir [@membre]` — Voir son niveau\n"
                 "`/classement` — Top 10 XP\n"
                 "`/niveau configurer #salon` — Salon de level up (admin)\n"
                 "`/niveau recompense-ajouter <n> @role` — Ajouter récompense\n"
