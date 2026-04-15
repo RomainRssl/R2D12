@@ -43,13 +43,17 @@ class R2D12(commands.Bot):
         # sinon sync global (peut prendre jusqu'à 1h)
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
-            # Vider les commandes obsolètes avant de resynchroniser
+            # Étape 1 : vider les commandes côté Discord
             self.tree.clear_commands(guild=guild)
+            await self.tree.sync(guild=guild)
+            # Étape 2 : repousser toutes les commandes
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"Slash commands synchronisées sur le serveur {GUILD_ID}")
         else:
             self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            self.tree.copy_global_to(guild=None)
             await self.tree.sync()
             print("Slash commands synchronisées globalement")
 
