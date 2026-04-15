@@ -49,7 +49,7 @@ class General(commands.Cog):
         embed.add_field(
             name="Templates & Annonces",
             value=(
-                "`/template créer <nom> <message>` — Créer un template avec `{variables}`\n"
+                "`/template creer <nom> <message>` — Créer un template avec `{variables}`\n"
                 "`/template utiliser <nom> [#salon]` — Utiliser un template (formulaire)\n"
                 "`/template liste` — Voir tous les templates\n"
                 "`/template supprimer <nom>` — Supprimer un template\n"
@@ -63,7 +63,7 @@ class General(commands.Cog):
                 "`/bienvenue configurer #salon [message]` — Configurer le message d'accueil\n"
                 "`/bienvenue tester` — Prévisualiser le message de bienvenue\n"
                 "`/bienvenue statut` — Voir la configuration actuelle\n"
-                "`/bienvenue désactiver` — Désactiver les messages de bienvenue"
+                "`/bienvenue desactiver` — Désactiver les messages de bienvenue"
             ),
             inline=False,
         )
@@ -95,7 +95,7 @@ class General(commands.Cog):
             name="Logs",
             value=(
                 "`/logs configurer #salon` — Définir le salon de logs\n"
-                "`/logs désactiver` — Désactiver les logs\n"
+                "`/logs desactiver` — Désactiver les logs\n"
                 "`/logs statut` — Voir la configuration"
             ),
             inline=False,
@@ -116,14 +116,14 @@ class General(commands.Cog):
                 "`/remplacer retirer <mot>` — Supprimer une règle\n"
                 "`/remplacer liste` — Voir toutes les règles\n"
                 "`/remplacer tester <phrase>` — Tester une phrase\n"
-                "`/remplacer activer / désactiver` — Activer ou désactiver"
+                "`/remplacer activer / desactiver` — Activer ou désactiver"
             ),
             inline=False,
         )
         embed.add_field(
             name="Rôles réactions (boutons)",
             value=(
-                "`/rolerole créer #salon <titre> <desc>` — Créer un panneau\n"
+                "`/rolerole creer #salon <titre> <desc>` — Créer un panneau\n"
                 "`/rolerole ajouter <msg_id> @role <label>` — Ajouter un bouton\n"
                 "`/rolerole supprimer <msg_id>` — Supprimer un panneau"
             ),
@@ -204,16 +204,16 @@ class General(commands.Cog):
         embed.add_field(
             name="Messages planifiés",
             value=(
-                "`/planifié créer <nom> #salon <message> <heures>` — Créer\n"
-                "`/planifié supprimer <nom>` — Supprimer\n"
-                "`/planifié liste` — Voir les messages planifiés"
+                "`/planifie creer <nom> #salon <message> <heures>` — Créer\n"
+                "`/planifie supprimer <nom>` — Supprimer\n"
+                "`/planifie liste` — Voir les messages planifiés"
             ),
             inline=False,
         )
         embed.add_field(
             name="Compteurs",
             value=(
-                "`/compteur créer <type>` — Créer un compteur vocal (membres/bots/salons/boosts)\n"
+                "`/compteur creer <type>` — Créer un compteur vocal (membres/bots/salons/boosts)\n"
                 "`/compteur supprimer <type>` — Supprimer un compteur\n"
                 "`/compteur liste` — Voir les compteurs actifs"
             ),
@@ -232,7 +232,7 @@ class General(commands.Cog):
         embed.add_field(
             name="🏎️ SimRacing — Sessions",
             value=(
-                "`/session créer <titre> <date> <heure> <sim> <piste>` — Organiser une session\n"
+                "`/session creer <titre> <date> <heure> <sim> <piste>` — Organiser une session\n"
                 "`/session liste` — Prochaines sessions\n"
                 "`/session info <id>` — Détails d'une session\n"
                 "`/session annuler <id>` — Annuler une session\n"
@@ -243,13 +243,13 @@ class General(commands.Cog):
         embed.add_field(
             name="🏎️ SimRacing — Championnats",
             value=(
-                "`/championnat créer <nom> <points>` — Créer un championnat\n"
-                "`/championnat résultat <nom> <manche>` — Enregistrer les résultats\n"
+                "`/championnat creer <nom> <points>` — Créer un championnat\n"
+                "`/championnat resultat <nom> <manche>` — Enregistrer les résultats\n"
                 "`/championnat classement <nom>` — Voir le classement\n"
                 "`/championnat calendrier <nom>` — Voir les manches\n"
                 "`/championnat liste` — Tous les championnats\n"
                 "`/incident signaler @pilote <raison>` — Signaler un incident\n"
-                "`/incident pénalité @pilote <type> <raison>` — Appliquer une pénalité"
+                "`/incident penalite @pilote <type> <raison>` — Appliquer une pénalité"
             ),
             inline=False,
         )

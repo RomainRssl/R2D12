@@ -82,7 +82,7 @@ class Counters(commands.Cog):
     async def before_update(self):
         await self.bot.wait_until_ready()
 
-    @compteur_group.command(name="créer", description="Créer un salon compteur")
+    @compteur_group.command(name="creer", description="Créer un salon compteur")
     @app_commands.describe(type="Type de compteur")
     @app_commands.choices(type=[
         app_commands.Choice(name="Membres", value="membres"),

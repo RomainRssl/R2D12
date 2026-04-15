@@ -51,7 +51,7 @@ class Logs(commands.Cog):
         embed.add_field(name="Activé", value="Oui")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @logs_group.command(name="désactiver", description="Désactiver les logs")
+    @logs_group.command(name="desactiver", description="Désactiver les logs")
     @app_commands.default_permissions(manage_guild=True)
     async def logs_disable(self, interaction: discord.Interaction):
         data = load_logs()

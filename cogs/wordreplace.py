@@ -190,7 +190,7 @@ class WordReplace(commands.Cog):
         save_data(data)
         await interaction.response.send_message("✅ Remplacement automatique **activé**.", ephemeral=True)
 
-    @remplacer_group.command(name="désactiver", description="Désactiver le remplacement automatique")
+    @remplacer_group.command(name="desactiver", description="Désactiver le remplacement automatique")
     @app_commands.default_permissions(manage_guild=True)
     async def wr_disable(self, interaction: discord.Interaction):
         data = load_data()

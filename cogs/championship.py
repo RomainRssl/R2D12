@@ -73,7 +73,7 @@ class Championship(commands.Cog):
 
     # ── Gestion du championnat ────────────────────────────────────────────────
 
-    @champ_group.command(name="créer", description="Créer un nouveau championnat")
+    @champ_group.command(name="creer", description="Créer un nouveau championnat")
     @app_commands.describe(
         nom="Nom du championnat",
         points_system="Système de points (f1, f2, indycar, simple, égal)",
@@ -157,7 +157,7 @@ class Championship(commands.Cog):
             )
         await interaction.response.send_message(embed=embed)
 
-    @champ_group.command(name="résultat", description="Enregistrer les résultats d'une course")
+    @champ_group.command(name="resultat", description="Enregistrer les résultats d'une course")
     @app_commands.describe(
         nom="Nom du championnat",
         manche="Nom ou numéro de la manche (ex: Manche 3 — Monza)",
@@ -250,7 +250,7 @@ class Championship(commands.Cog):
         embed.set_footer(text="En attente de décision des stewards")
         await interaction.response.send_message(embed=embed)
 
-    @incident_group.command(name="pénalité", description="Appliquer une pénalité à un pilote")
+    @incident_group.command(name="penalite", description="Appliquer une pénalité à un pilote")
     @app_commands.describe(
         pilote="Pilote sanctionné",
         type="Type de pénalité",

@@ -347,7 +347,7 @@ class Birthday(commands.Cog):
             ephemeral=True,
         )
 
-    @birthday_group.command(name="mp-désactiver", description="Désactiver le MP automatique à l'arrivée")
+    @birthday_group.command(name="mp-desactiver", description="Désactiver le MP automatique à l'arrivée")
     @app_commands.default_permissions(manage_guild=True)
     async def birthday_dm_disable(self, interaction: discord.Interaction):
         data = load_data()

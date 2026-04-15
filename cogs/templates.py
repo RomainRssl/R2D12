@@ -86,7 +86,7 @@ class Templates(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @template_group.command(name="créer", description="Créer un template avec des {variables} à remplir")
+    @template_group.command(name="creer", description="Créer un template avec des {variables} à remplir")
     @app_commands.describe(
         nom="Nom du template (ex: bienvenue)",
         message="Contenu du template. Utilisez {variable} pour les trous (ex: Bonjour {prénom} !)",

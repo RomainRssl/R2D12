@@ -125,7 +125,7 @@ class Sessions(commands.Cog):
 
     # ── Commandes ─────────────────────────────────────────────────────────────
 
-    @session_group.command(name="créer", description="Créer une session de roulage")
+    @session_group.command(name="creer", description="Créer une session de roulage")
     @app_commands.describe(
         titre="Titre de la session",
         date="Date au format JJ/MM/AAAA (ex: 25/12/2025)",

@@ -21,7 +21,7 @@ def save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-planifie_group = app_commands.Group(name="planifié", description="Gestion des messages récurrents")
+planifie_group = app_commands.Group(name="planifie", description="Gestion des messages récurrents")
 
 
 class Scheduled(commands.Cog):
@@ -70,7 +70,7 @@ class Scheduled(commands.Cog):
     async def before_send(self):
         await self.bot.wait_until_ready()
 
-    @planifie_group.command(name="créer", description="Créer un message récurrent")
+    @planifie_group.command(name="creer", description="Créer un message récurrent")
     @app_commands.describe(
         nom="Nom du message planifié",
         salon="Salon de destination",

@@ -86,7 +86,7 @@ class ReactionRoles(commands.Cog):
                 if panel.get("roles"):
                     self.bot.add_view(RoleView(panel["roles"]))
 
-    @rolerole_group.command(name="créer", description="Créer un panneau de rôles réactions")
+    @rolerole_group.command(name="creer", description="Créer un panneau de rôles réactions")
     @app_commands.describe(salon="Salon où envoyer le panneau", titre="Titre du panneau", description="Description du panneau")
     @app_commands.default_permissions(manage_roles=True)
     async def rr_create(self, interaction: discord.Interaction, salon: discord.TextChannel, titre: str, description: str):
