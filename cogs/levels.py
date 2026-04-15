@@ -62,7 +62,12 @@ class Levels(commands.Cog):
         guild_key = str(message.guild.id)
         user_key = str(message.author.id)
 
-        guild_data = data.setdefault(guild_key, {"channel_id": None, "rewards": {}, "members": {}})
+        guild_data = data.setdefault(guild_key, {"enabled": True, "channel_id": None, "rewards": {}, "members": {}})
+
+        # Vérifie si le système XP est activé
+        if not guild_data.get("enabled", True):
+            return
+
         member_data = guild_data["members"].setdefault(user_key, {"xp": 0, "level": 0, "last_message": None})
 
         # Cooldown
@@ -147,6 +152,22 @@ class Levels(commands.Cog):
             prefix = medals[i] if i < 3 else f"`#{i+1}`"
             embed.add_field(name=f"{prefix} {name}", value=f"Niveau {level} • {mdata['xp']} XP", inline=False)
         await interaction.response.send_message(embed=embed)
+
+    @niveau_group.command(name="activer", description="Activer le système de niveaux et XP")
+    @app_commands.default_permissions(manage_guild=True)
+    async def niveau_enable(self, interaction: discord.Interaction):
+        data = load_data()
+        data.setdefault(str(interaction.guild_id), {"enabled": True, "channel_id": None, "rewards": {}, "members": {}})["enabled"] = True
+        save_data(data)
+        await interaction.response.send_message("✅ Système de niveaux & XP **activé**.", ephemeral=True)
+
+    @niveau_group.command(name="désactiver", description="Désactiver le système de niveaux et XP")
+    @app_commands.default_permissions(manage_guild=True)
+    async def niveau_disable(self, interaction: discord.Interaction):
+        data = load_data()
+        data.setdefault(str(interaction.guild_id), {"enabled": True, "channel_id": None, "rewards": {}, "members": {}})["enabled"] = False
+        save_data(data)
+        await interaction.response.send_message("❌ Système de niveaux & XP **désactivé**. Les données sont conservées.", ephemeral=True)
 
     @niveau_group.command(name="configurer", description="Définir le salon des annonces de level up")
     @app_commands.describe(salon="Salon pour les messages de level up (aucun = salon du message)")
