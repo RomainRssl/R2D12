@@ -132,6 +132,8 @@ Sur le Portail Développeur, onglet **OAuth2 → URL Generator** :
 
 ## Démarrage
 
+### En local (test uniquement)
+
 ```bash
 python bot.py
 ```
@@ -143,6 +145,49 @@ R2D12 est en ligne ! Connecté en tant que R2D12#0000 (ID: ...)
 ```
 
 Pour l'arrêter : `Ctrl + C`
+
+> **Important :** En local, le bot s'arrête dès que vous fermez le terminal ou éteignez votre PC. Pour un fonctionnement 24h/24, utilisez un VPS (voir ci-dessous).
+
+---
+
+## Déploiement sur VPS (recommandé)
+
+Un VPS est un serveur distant qui tourne en permanence. Le bot reste en ligne 24h/24 sans que votre ordinateur soit allumé. Tout hébergeur Linux fonctionne (IONOS, OVH, Hetzner, DigitalOcean…).
+
+### Installation en une commande
+
+Connectez-vous à votre VPS en SSH, puis exécutez :
+
+```bash
+git clone https://github.com/romainrssl/r2d12.git && sudo bash r2d12/install.sh
+```
+
+Le script installe automatiquement Python, les dépendances, crée un service système et démarre le bot. Il vous demandera uniquement votre **token Discord** et optionnellement l'**ID de votre serveur**.
+
+### Commandes de gestion
+
+```bash
+sudo systemctl status r2d12      # Voir l'état du bot
+sudo systemctl restart r2d12     # Redémarrer le bot
+sudo systemctl stop r2d12        # Arrêter le bot
+sudo journalctl -u r2d12 -f      # Voir les logs en direct
+```
+
+### Mettre à jour le bot
+
+```bash
+sudo bash /opt/r2d12/update.sh
+```
+
+Le script arrête le bot, récupère les dernières modifications depuis GitHub, met à jour les dépendances et redémarre automatiquement.
+
+### Connexion SSH à votre VPS
+
+```bash
+ssh root@ADRESSE_IP_DE_VOTRE_VPS
+```
+
+L'adresse IP se trouve dans votre espace client IONOS.
 
 ---
 
