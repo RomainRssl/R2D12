@@ -26,7 +26,7 @@ systemctl stop r2d12
 
 info "Récupération des dernières modifications..."
 cd "$INSTALL_DIR"
-sudo -u r2d12 git pull origin main
+sudo -u r2d12 git pull
 
 info "Mise à jour des dépendances..."
 sudo -u r2d12 "$INSTALL_DIR/venv/bin/pip" install -r requirements.txt -q

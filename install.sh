@@ -49,7 +49,7 @@ INSTALL_DIR="/opt/r2d12"
 if [ -d "$INSTALL_DIR/.git" ]; then
     warning "Dépôt existant détecté — mise à jour..."
     cd "$INSTALL_DIR"
-    sudo -u r2d12 git pull origin main
+    sudo -u r2d12 git pull
 else
     info "Clonage du dépôt..."
     git clone https://github.com/romainrssl/r2d12.git "$INSTALL_DIR"
