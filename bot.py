@@ -41,10 +41,6 @@ class R2D12(commands.Bot):
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
-            # Supprime les commandes globales pour éviter les conflits avec les commandes de guilde
-            self.tree.clear_commands(guild=None)
-            await self.tree.sync(guild=None)
-            # Enregistre les commandes sur la guilde
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"Slash commands synchronisées sur le serveur {GUILD_ID}")
