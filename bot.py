@@ -41,12 +41,14 @@ class R2D12(commands.Bot):
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            self.tree.clear_commands(guild=guild)
+            await self.tree.sync(guild=guild)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
-            print(f"Slash commands synchronisées sur le serveur {GUILD_ID}")
+            print(f"Slash commands synchronisées sur le serveur {GUILD_ID}", flush=True)
         else:
             await self.tree.sync()
-            print("Slash commands synchronisées globalement")
+            print("Slash commands synchronisées globalement", flush=True)
 
     async def on_ready(self):
         print(f"R2D12 est en ligne ! Connecté en tant que {self.user} (ID: {self.user.id})")
