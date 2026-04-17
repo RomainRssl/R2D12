@@ -48,23 +48,6 @@ class R2D12(commands.Bot):
             await self.tree.sync()
             print("Slash commands synchronisées globalement")
 
-        @self.tree.error
-        async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
-            if isinstance(error, discord.app_commands.CommandSignatureMismatch):
-                try:
-                    guild_obj = discord.Object(id=interaction.guild_id) if interaction.guild_id else None
-                    if guild_obj:
-                        self.tree.copy_global_to(guild=guild_obj)
-                        await self.tree.sync(guild=guild_obj)
-                    else:
-                        await self.tree.sync()
-                except Exception:
-                    pass
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "Commandes mises à jour ! Réessayez dans quelques secondes.", ephemeral=True
-                    )
-
     async def on_ready(self):
         print(f"R2D12 est en ligne ! Connecté en tant que {self.user} (ID: {self.user.id})")
         await self.change_presence(
