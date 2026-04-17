@@ -20,11 +20,10 @@ def save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-autorole_group = app_commands.Group(name="autorole", description="Gestion des rôles attribués automatiquement à l'arrivée")
-
-
 class AutoRoles(commands.Cog):
     """Attribue automatiquement des rôles aux nouveaux membres."""
+
+    autorole_group = app_commands.Group(name="autorole", description="Gestion des rôles attribués automatiquement à l'arrivée")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -88,6 +87,4 @@ class AutoRoles(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = AutoRoles(bot)
-    bot.tree.add_command(autorole_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(AutoRoles(bot))

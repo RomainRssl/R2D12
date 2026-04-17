@@ -80,11 +80,10 @@ def _build_suggestion_embed(suggestion: dict, statut_override: str = None) -> di
     return embed
 
 
-suggestion_group = app_commands.Group(name="suggestion", description="Système de suggestions communautaires")
-
-
 class Suggestions(commands.Cog):
     """Système de suggestions avec vote."""
+
+    suggestion_group = app_commands.Group(name="suggestion", description="Système de suggestions communautaires")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -176,6 +175,4 @@ class Suggestions(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Suggestions(bot)
-    bot.tree.add_command(suggestion_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Suggestions(bot))

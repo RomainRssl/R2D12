@@ -61,12 +61,11 @@ def get_standings(championship: dict, guild: discord.Guild) -> list[tuple]:
     return [(pts, uid, victories.get(uid, 0), podiums.get(uid, 0)) for pts, uid in [(v, k) for k, v in sorted_standings]]
 
 
-champ_group = app_commands.Group(name="championnat", description="Gestion des championnats et ligues de simracing")
-incident_group = app_commands.Group(name="incident", description="Gestion des incidents de course")
-
-
 class Championship(commands.Cog):
     """Championnats, résultats de courses, incidents et pénalités."""
+
+    champ_group = app_commands.Group(name="championnat", description="Gestion des championnats et ligues de simracing")
+    incident_group = app_commands.Group(name="incident", description="Gestion des incidents de course")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -431,7 +430,4 @@ class RaceResultModal(discord.ui.Modal):
 
 
 async def setup(bot: commands.Bot):
-    cog = Championship(bot)
-    bot.tree.add_command(champ_group)
-    bot.tree.add_command(incident_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Championship(bot))

@@ -74,14 +74,13 @@ class FillTemplateModal(discord.ui.Modal):
             await interaction.response.send_message(embed=embed)
 
 
-template_group = app_commands.Group(
-    name="template",
-    description="Gestion des messages pré-enregistrés avec variables",
-)
-
-
 class Templates(commands.Cog):
     """Messages pré-enregistrés avec trous à remplir et annonces."""
+
+    template_group = app_commands.Group(
+        name="template",
+        description="Gestion des messages pré-enregistrés avec variables",
+    )
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -243,6 +242,4 @@ class Templates(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Templates(bot)
-    bot.tree.add_command(template_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Templates(bot))

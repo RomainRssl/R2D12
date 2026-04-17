@@ -21,11 +21,10 @@ def save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-planifie_group = app_commands.Group(name="planifie", description="Gestion des messages récurrents")
-
-
 class Scheduled(commands.Cog):
     """Messages récurrents automatiques."""
+
+    planifie_group = app_commands.Group(name="planifie", description="Gestion des messages récurrents")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -150,6 +149,4 @@ class Scheduled(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Scheduled(bot)
-    bot.tree.add_command(planifie_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Scheduled(bot))

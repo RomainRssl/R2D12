@@ -31,11 +31,10 @@ def get_member(guild_data: dict, user_id: int) -> dict:
     return guild_data["members"].setdefault(str(user_id), {"balance": 0, "last_daily": None, "inventaire": []})
 
 
-boutique_group = app_commands.Group(name="boutique", description="Boutique du serveur")
-
-
 class Economy(commands.Cog):
     """Économie virtuelle avec boutique et inventaire."""
+
+    boutique_group = app_commands.Group(name="boutique", description="Boutique du serveur")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -250,6 +249,4 @@ class Economy(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Economy(bot)
-    bot.tree.add_command(boutique_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Economy(bot))

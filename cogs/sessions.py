@@ -66,11 +66,10 @@ def _format_inscrits(ids: list, guild: discord.Guild) -> str:
     return "\n".join(f"• {n}" for n in names) if names else ""
 
 
-session_group = app_commands.Group(name="session", description="Organisation de sessions de roulage")
-
-
 class Sessions(commands.Cog):
     """Gestion des sessions de roulage avec rappels automatiques."""
+
+    session_group = app_commands.Group(name="session", description="Organisation de sessions de roulage")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -291,6 +290,4 @@ class SessionView(discord.ui.View):
 
 
 async def setup(bot: commands.Bot):
-    cog = Sessions(bot)
-    bot.tree.add_command(session_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Sessions(bot))

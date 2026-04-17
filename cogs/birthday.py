@@ -140,14 +140,14 @@ class BirthdayDMView(discord.ui.View):
 
 # ── Groupe de commandes ───────────────────────────────────────────────────────
 
-birthday_group = app_commands.Group(
-    name="anniversaire",
-    description="Gestion des anniversaires des membres",
-)
-
 
 class Birthday(commands.Cog):
     """Souhaite automatiquement l'anniversaire des membres."""
+
+    birthday_group = app_commands.Group(
+        name="anniversaire",
+        description="Gestion des anniversaires des membres",
+    )
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -496,6 +496,4 @@ class Birthday(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Birthday(bot)
-    bot.tree.add_command(birthday_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Birthday(bot))

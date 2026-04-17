@@ -45,11 +45,10 @@ def get_channel_name(guild: discord.Guild, counter_type: str) -> str:
     return f"{info['emoji']} {info['label']}: {value}"
 
 
-compteur_group = app_commands.Group(name="compteur", description="Gestion des compteurs vocaux automatiques")
-
-
 class Counters(commands.Cog):
     """Compteurs en temps réel dans des salons vocaux."""
+
+    compteur_group = app_commands.Group(name="compteur", description="Gestion des compteurs vocaux automatiques")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -159,6 +158,4 @@ class Counters(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Counters(bot)
-    bot.tree.add_command(compteur_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Counters(bot))

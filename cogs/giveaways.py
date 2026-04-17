@@ -77,11 +77,10 @@ def pick_winners(giveaway: dict) -> list[str]:
     return random.sample(participants, nb) if nb > 0 else []
 
 
-giveaway_group = app_commands.Group(name="giveaway", description="Gestion des giveaways")
-
-
 class Giveaways(commands.Cog):
     """Système de giveaways avec tirage automatique."""
+
+    giveaway_group = app_commands.Group(name="giveaway", description="Gestion des giveaways")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -233,6 +232,4 @@ class Giveaways(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Giveaways(bot)
-    bot.tree.add_command(giveaway_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Giveaways(bot))

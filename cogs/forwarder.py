@@ -29,11 +29,10 @@ async def get_or_create_webhook(channel: discord.TextChannel, bot_name: str) -> 
     return await channel.create_webhook(name="R2D12-Relais")
 
 
-relais_group = app_commands.Group(name="relais", description="Relais automatique de messages depuis un autre serveur")
-
-
 class Forwarder(commands.Cog):
     """Reposte automatiquement les messages d'un salon externe vers un salon local."""
+
+    relais_group = app_commands.Group(name="relais", description="Relais automatique de messages depuis un autre serveur")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -266,6 +265,4 @@ class Forwarder(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Forwarder(bot)
-    bot.tree.add_command(relais_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Forwarder(bot))

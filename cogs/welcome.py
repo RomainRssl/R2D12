@@ -35,14 +35,13 @@ def format_welcome(message: str, member: discord.Member) -> str:
     )
 
 
-welcome_group = app_commands.Group(
-    name="bienvenue",
-    description="Configuration du message de bienvenue pour les nouveaux membres",
-)
-
-
 class Welcome(commands.Cog):
     """Message automatique pour les nouveaux arrivants."""
+
+    welcome_group = app_commands.Group(
+        name="bienvenue",
+        description="Configuration du message de bienvenue pour les nouveaux membres",
+    )
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -173,6 +172,4 @@ class Welcome(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Welcome(bot)
-    bot.tree.add_command(welcome_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Welcome(bot))

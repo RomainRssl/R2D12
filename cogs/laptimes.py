@@ -52,11 +52,10 @@ def make_key(voiture: str, piste: str) -> str:
     return f"{voiture.lower().strip()}|{piste.lower().strip()}"
 
 
-temps_group = app_commands.Group(name="temps", description="Leaderboard des meilleurs temps au tour")
-
-
 class LapTimes(commands.Cog):
     """Leaderboard de temps au tour par voiture et par piste."""
+
+    temps_group = app_commands.Group(name="temps", description="Leaderboard des meilleurs temps au tour")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -237,6 +236,4 @@ class LapTimes(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = LapTimes(bot)
-    bot.tree.add_command(temps_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(LapTimes(bot))

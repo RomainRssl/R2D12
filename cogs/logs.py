@@ -28,11 +28,10 @@ async def get_log_channel(guild: discord.Guild) -> discord.TextChannel | None:
     return guild.get_channel(config.get("channel_id", 0))
 
 
-logs_group = app_commands.Group(name="logs", description="Configuration des logs d'audit du serveur")
-
-
 class Logs(commands.Cog):
     """Logs d'audit automatiques."""
+
+    logs_group = app_commands.Group(name="logs", description="Configuration des logs d'audit du serveur")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -172,6 +171,4 @@ class Logs(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Logs(bot)
-    bot.tree.add_command(logs_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Logs(bot))

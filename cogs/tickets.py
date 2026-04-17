@@ -123,11 +123,10 @@ async def _close_ticket(interaction: discord.Interaction):
     await interaction.channel.delete(reason=f"Ticket fermé par {interaction.user}")
 
 
-ticket_group = app_commands.Group(name="ticket", description="Système de tickets de support")
-
-
 class Tickets(commands.Cog):
     """Système de tickets de support."""
+
+    ticket_group = app_commands.Group(name="ticket", description="Système de tickets de support")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -178,6 +177,4 @@ class Tickets(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Tickets(bot)
-    bot.tree.add_command(ticket_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Tickets(bot))

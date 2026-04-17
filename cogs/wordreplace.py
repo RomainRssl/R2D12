@@ -41,14 +41,13 @@ def apply_replacements(content: str, rules: dict) -> tuple[str, bool]:
     return content, modified
 
 
-remplacer_group = app_commands.Group(
-    name="remplacer",
-    description="Gestion du remplacement automatique de mots",
-)
-
-
 class WordReplace(commands.Cog):
     """Remplace automatiquement les mots bannis dans les messages."""
+
+    remplacer_group = app_commands.Group(
+        name="remplacer",
+        description="Gestion du remplacement automatique de mots",
+    )
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -214,6 +213,4 @@ class WordReplace(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = WordReplace(bot)
-    bot.tree.add_command(remplacer_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(WordReplace(bot))

@@ -44,11 +44,10 @@ def progress_bar(current: int, total: int, length: int = 10) -> str:
     return "█" * filled + "░" * (length - filled)
 
 
-niveau_group = app_commands.Group(name="niveau", description="Système de niveaux et d'expérience")
-
-
 class Levels(commands.Cog):
     """Système XP et niveaux par message."""
+
+    niveau_group = app_commands.Group(name="niveau", description="Système de niveaux et d'expérience")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -236,6 +235,4 @@ class Levels(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = Levels(bot)
-    bot.tree.add_command(niveau_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(Levels(bot))

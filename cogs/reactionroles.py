@@ -68,12 +68,11 @@ class RoleView(discord.ui.View):
             ))
 
 
-rolerole_group = app_commands.Group(name="rolerole", description="Gestion des menus de rôles réactions")
-emojirole_group = app_commands.Group(name="emojirole", description="Rôles attribués via réaction emoji sur un message")
-
-
 class ReactionRoles(commands.Cog):
     """Menus de rôles avec boutons."""
+
+    rolerole_group = app_commands.Group(name="rolerole", description="Gestion des menus de rôles réactions")
+    emojirole_group = app_commands.Group(name="emojirole", description="Rôles attribués via réaction emoji sur un message")
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -296,7 +295,4 @@ class ReactionRoles(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    cog = ReactionRoles(bot)
-    bot.tree.add_command(rolerole_group)
-    bot.tree.add_command(emojirole_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(ReactionRoles(bot))
