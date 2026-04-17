@@ -41,6 +41,10 @@ class R2D12(commands.Bot):
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+            # Supprime les commandes globales pour éviter les conflits avec les commandes de guilde
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync(guild=None)
+            # Enregistre les commandes sur la guilde
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"Slash commands synchronisées sur le serveur {GUILD_ID}")
@@ -51,12 +55,15 @@ class R2D12(commands.Bot):
         @self.tree.error
         async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
             if isinstance(error, discord.app_commands.CommandSignatureMismatch):
-                guild_obj = discord.Object(id=interaction.guild_id) if interaction.guild_id else None
-                if guild_obj:
-                    self.tree.copy_global_to(guild=guild_obj)
-                    await self.tree.sync(guild=guild_obj)
-                else:
-                    await self.tree.sync()
+                try:
+                    guild_obj = discord.Object(id=interaction.guild_id) if interaction.guild_id else None
+                    if guild_obj:
+                        self.tree.copy_global_to(guild=guild_obj)
+                        await self.tree.sync(guild=guild_obj)
+                    else:
+                        await self.tree.sync()
+                except Exception:
+                    pass
                 if not interaction.response.is_done():
                     await interaction.response.send_message(
                         "Commandes mises à jour ! Réessayez dans quelques secondes.", ephemeral=True
