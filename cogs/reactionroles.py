@@ -275,26 +275,35 @@ class ReactionRoles(commands.Cog):
         if not msg_entries:
             return
 
-        emoji_str = str(payload.emoji)
-        for entry in msg_entries:
-            if entry["emoji"] == emoji_str:
-                guild = self.bot.get_guild(payload.guild_id)
-                if not guild:
-                    return
-                role = guild.get_role(entry["role_id"])
-                if not role:
-                    return
-                member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-                if not member:
-                    return
-                try:
-                    if add:
-                        await member.add_roles(role, reason="Emoji-rôle automatique")
-                    else:
-                        await member.remove_roles(role, reason="Emoji-rôle automatique")
-                except (discord.Forbidden, discord.HTTPException):
-                    pass
-                break
+        # Normalise pour gérer les variantes Unicode (ex: ❤ vs ❤️)
+        emoji_str = str(payload.emoji).strip()
+
+        matched = next((e for e in msg_entries if e["emoji"].strip() == emoji_str), None)
+        if not matched:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild:
+            return
+        role = guild.get_role(matched["role_id"])
+        if not role:
+            return
+
+        # payload.member est présent pour les adds, absent pour les removes
+        member = getattr(payload, "member", None) or guild.get_member(payload.user_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(payload.user_id)
+            except (discord.NotFound, discord.HTTPException):
+                return
+
+        try:
+            if add:
+                await member.add_roles(role, reason="Emoji-rôle automatique")
+            else:
+                await member.remove_roles(role, reason="Emoji-rôle automatique")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
 
 async def setup(bot: commands.Bot):
