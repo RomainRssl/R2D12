@@ -186,6 +186,9 @@ class ReactionRoles(commands.Cog):
                 )
                 return
 
+        # Defer immédiatement : la recherche du message peut prendre plusieurs secondes
+        await interaction.response.defer(ephemeral=True)
+
         msg_entries.append({"emoji": emoji, "role_id": role.id})
         save_er(data)
 
@@ -206,7 +209,7 @@ class ReactionRoles(commands.Cog):
         embed.add_field(name="Emoji", value=emoji)
         embed.add_field(name="Rôle", value=role.mention)
         embed.set_footer(text="Réagir avec cet emoji attribuera / retirera le rôle automatiquement.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @emojirole_group.command(name="retirer", description="Supprimer l'association emoji → rôle sur un message")
     @app_commands.describe(
