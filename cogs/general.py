@@ -106,7 +106,10 @@ class General(commands.Cog):
                 "`/role creer <nom> [couleur] [mentionnable] [affiché séparément]` — Créer un rôle\n"
                 "`/role supprimer @role` — Supprimer un rôle\n"
                 "`/role modifier @role [nom] [couleur]` — Modifier un rôle\n"
-                "`/role liste` — Voir tous les rôles"
+                "`/role liste` — Voir tous les rôles\n"
+                "`/role permissions-voir @role` — Voir les permissions d'un rôle\n"
+                "`/role permissions-ajouter @role <permission>` — Accorder une permission\n"
+                "`/role permissions-retirer @role <permission>` — Retirer une permission"
             ),
             inline=False,
         )
