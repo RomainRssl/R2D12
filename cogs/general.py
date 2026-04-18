@@ -101,6 +101,16 @@ class General(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="Gestion des rôles",
+            value=(
+                "`/role creer <nom> [couleur] [mentionnable] [affiché séparément]` — Créer un rôle\n"
+                "`/role supprimer @role` — Supprimer un rôle\n"
+                "`/role modifier @role [nom] [couleur]` — Modifier un rôle\n"
+                "`/role liste` — Voir tous les rôles"
+            ),
+            inline=False,
+        )
+        embed.add_field(
             name="Rôles automatiques",
             value=(
                 "`/autorole ajouter @role` — Ajouter un rôle automatique\n"
