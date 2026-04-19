@@ -38,7 +38,7 @@ class Calendar(commands.Cog):
         races = []
         for article in soup.find_all("article"):
             time_el = article.find("time")
-            if not time_el or not time_el.get("dateTime"):
+            if not time_el or not time_el.get("datetime"):
                 continue
             title_el = article.find("h3")
             desc_el = article.find("p", class_=lambda c: c and "line-clamp-2" in c)
@@ -47,9 +47,9 @@ class Calendar(commands.Cog):
                 class_=lambda c: c and any(color in c for color in TAG_COLORS),
             )
             races.append({
-                "id": time_el["dateTime"],
+                "id": time_el["datetime"],
                 "title": title_el.get_text(strip=True) if title_el else "?",
-                "date": time_el["dateTime"],
+                "date": time_el["datetime"],
                 "tags": [t.get_text(strip=True) for t in tag_els],
                 "description": desc_el.get_text(strip=True) if desc_el else "",
             })
