@@ -5,11 +5,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from discord.ext import commands, tasks
 import discord
+from bs4 import BeautifulSoup
 
-RACES_API_URL = os.getenv("RACES_API_URL", "http://82.165.167.165/api/races")
+SITE_URL = os.getenv("RACES_SITE_URL", "http://82.165.167.165")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
 DATA_FILE = "data/known_races.json"
 PARIS = ZoneInfo("Europe/Paris")
+TAG_COLORS = ("text-blue-400", "text-green-400", "text-orange-400")
 
 
 class Calendar(commands.Cog):
@@ -31,6 +33,28 @@ class Calendar(commands.Cog):
         with open(DATA_FILE, "w") as f:
             json.dump({"known_ids": list(ids)}, f)
 
+    def _parse_races(self, html: str) -> list[dict]:
+        soup = BeautifulSoup(html, "html.parser")
+        races = []
+        for article in soup.find_all("article"):
+            time_el = article.find("time")
+            if not time_el or not time_el.get("dateTime"):
+                continue
+            title_el = article.find("h3")
+            desc_el = article.find("p", class_=lambda c: c and "line-clamp-2" in c)
+            tag_els = article.find_all(
+                "span",
+                class_=lambda c: c and any(color in c for color in TAG_COLORS),
+            )
+            races.append({
+                "id": time_el["dateTime"],
+                "title": title_el.get_text(strip=True) if title_el else "?",
+                "date": time_el["dateTime"],
+                "tags": [t.get_text(strip=True) for t in tag_els],
+                "description": desc_el.get_text(strip=True) if desc_el else "",
+            })
+        return races
+
     @tasks.loop(minutes=5)
     async def check_new_races(self):
         if not RACES_CHANNEL_ID:
@@ -38,12 +62,13 @@ class Calendar(commands.Cog):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    RACES_API_URL, timeout=aiohttp.ClientTimeout(total=10)
+                    SITE_URL, timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
-                    races = await resp.json()
+                    html = await resp.text()
         except Exception:
             return
 
+        races = self._parse_races(html)
         known = self._load_known()
         current_ids = {r["id"] for r in races}
 
@@ -68,12 +93,11 @@ class Calendar(commands.Cog):
     def _build_embed(self, race: dict) -> discord.Embed:
         dt = datetime.fromisoformat(race["date"].replace("Z", "+00:00")).astimezone(PARIS)
         date_str = dt.strftime("%A %d %B %Y à %H:%M").capitalize()
-        site_url = RACES_API_URL.replace("/api/races", "")
         embed = discord.Embed(
             title=f"🏁 Nouvelle course : {race['title']}",
             description=race.get("description") or "",
             color=0xE63946,
-            url=site_url,
+            url=SITE_URL,
         )
         embed.add_field(name="📅 Date", value=date_str, inline=False)
         if race.get("tags"):
