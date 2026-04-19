@@ -114,6 +114,16 @@ class General(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="Gestion des salons",
+            value=(
+                "`/salon creer <type> <nom> [catégorie] [description] [limite] [privé]` — Créer un salon\n"
+                "`/salon modifier <salon> [nom] [description] [catégorie] [limite] [ralentissement] [privé]` — Modifier un salon\n"
+                "`/salon supprimer <salon> [raison]` — Supprimer un salon\n"
+                "`/salon liste` — Voir tous les salons"
+            ),
+            inline=False,
+        )
+        embed.add_field(
             name="Rôles automatiques",
             value=(
                 "`/autorole ajouter @role` — Ajouter un rôle automatique\n"

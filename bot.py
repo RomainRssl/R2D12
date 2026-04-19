@@ -39,6 +39,7 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.forwarder")
         await self.load_extension("cogs.wordreplace")
         await self.load_extension("cogs.roles")
+        await self.load_extension("cogs.channels")
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
