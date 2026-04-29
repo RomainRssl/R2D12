@@ -224,7 +224,7 @@ class Calendar(commands.Cog):
 
     # ── Commandes admin ───────────────────────────────────────────
 
-    @discord.app_commands.command(name="course-diagnostic", description="Diagnostique le système d'annonces de courses")
+    @discord.app_commands.command(name="coursediag", description="Diagnostique le système d'annonces de courses")
     @discord.app_commands.default_permissions(administrator=True)
     async def course_diagnostic(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -258,7 +258,7 @@ class Calendar(commands.Cog):
 
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
-    @discord.app_commands.command(name="course-reset", description="Réinitialise la liste des courses connues (force les annonces)")
+    @discord.app_commands.command(name="coursereset", description="Réinitialise la liste des courses connues (force les annonces)")
     @discord.app_commands.default_permissions(administrator=True)
     async def course_reset(self, interaction: discord.Interaction):
         import os as _os
@@ -271,7 +271,7 @@ class Calendar(commands.Cog):
         else:
             await interaction.response.send_message("Aucun fichier de courses connues trouvé.", ephemeral=True)
 
-    @discord.app_commands.command(name="course-forcer", description="Force l'annonce immédiate des courses non encore annoncées")
+    @discord.app_commands.command(name="courseforcer", description="Force l'annonce immédiate des courses non encore annoncées")
     @discord.app_commands.default_permissions(administrator=True)
     async def course_forcer(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
