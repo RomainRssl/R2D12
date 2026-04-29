@@ -226,7 +226,7 @@ class Calendar(commands.Cog):
 
     @discord.app_commands.command(name="coursediag", description="Diagnostique le système d'annonces de courses")
     async def course_diagnostic(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
+        if not interaction.user.guild_permissions.administrator and not any(r.id == RACES_STAFF_ROLE_ID for r in interaction.user.roles):
             await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
@@ -262,7 +262,7 @@ class Calendar(commands.Cog):
 
     @discord.app_commands.command(name="coursereset", description="Réinitialise la liste des courses connues (force les annonces)")
     async def course_reset(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
+        if not interaction.user.guild_permissions.administrator and not any(r.id == RACES_STAFF_ROLE_ID for r in interaction.user.roles):
             await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
             return
         import os as _os
@@ -277,7 +277,7 @@ class Calendar(commands.Cog):
 
     @discord.app_commands.command(name="courseforcer", description="Force l'annonce immédiate des courses non encore annoncées")
     async def course_forcer(self, interaction: discord.Interaction):
-        if not interaction.user.guild_permissions.administrator:
+        if not interaction.user.guild_permissions.administrator and not any(r.id == RACES_STAFF_ROLE_ID for r in interaction.user.roles):
             await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
