@@ -16,7 +16,6 @@ DATA_FILE = "data/known_races.json"
 DATA_MESSAGES = "data/race_messages.json"
 PARIS = ZoneInfo("Europe/Paris")
 TAG_COLORS = ("text-blue-400", "text-green-400", "text-orange-400")
-REACTION_EMOJI = "🏁"
 
 
 def _slugify(text: str) -> str:
@@ -24,6 +23,38 @@ def _slugify(text: str) -> str:
     text = text.encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^\w\s-]", "", text.lower())
     return re.sub(r"[-\s]+", "-", text).strip("-")
+
+
+class RaceButton(discord.ui.Button):
+    def __init__(self, race_title: str, role_id: int):
+        super().__init__(
+            label=f"Inscription {race_title}",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"race_register_{role_id}",
+        )
+        self.role_id = role_id
+
+    async def callback(self, interaction: discord.Interaction):
+        role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("Rôle introuvable.", ephemeral=True)
+            return
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(
+                f"❌ Désinscrit de **{role.name}**.", ephemeral=True
+            )
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(
+                f"✅ Inscrit pour **{role.name}** !", ephemeral=True
+            )
+
+
+class RaceRegistrationView(discord.ui.View):
+    def __init__(self, race_title: str, role_id: int):
+        super().__init__(timeout=None)
+        self.add_item(RaceButton(race_title, role_id))
 
 
 class Calendar(commands.Cog):
@@ -34,7 +65,13 @@ class Calendar(commands.Cog):
     def cog_unload(self):
         self.check_new_races.cancel()
 
-    # ── Known races (dédup scraping) ──────────────────────────────
+    @commands.Cog.listener()
+    async def on_ready(self):
+        for msg_id, data in self._load_messages().items():
+            view = RaceRegistrationView(data["title"], data["role_id"])
+            self.bot.add_view(view, message_id=int(msg_id))
+
+    # ── Known races ───────────────────────────────────────────────
 
     def _load_known(self) -> set[str] | None:
         try:
@@ -47,7 +84,7 @@ class Calendar(commands.Cog):
         with open(DATA_FILE, "w") as f:
             json.dump({"known_ids": list(ids)}, f)
 
-    # ── Mapping message → rôle/salon ──────────────────────────────
+    # ── Message mapping ───────────────────────────────────────────
 
     def _load_messages(self) -> dict:
         try:
@@ -62,10 +99,14 @@ class Calendar(commands.Cog):
         with open(DATA_MESSAGES, "w") as f:
             json.dump(messages, f)
 
-    # ── Scraping HTML ─────────────────────────────────────────────
+    # ── HTML scraping ─────────────────────────────────────────────
 
     def _parse_races(self, html: str) -> list[dict]:
         soup = BeautifulSoup(html, "html.parser")
+
+        og_image = soup.find("meta", property="og:image")
+        og_image_url = og_image.get("content") if og_image else None
+
         races = []
         for article in soup.find_all("article"):
             time_el = article.find("time")
@@ -77,16 +118,26 @@ class Calendar(commands.Cog):
                 "span",
                 class_=lambda c: c and any(color in c for color in TAG_COLORS),
             )
+            img_el = article.find("img")
+            image_url = None
+            if img_el:
+                src = img_el.get("src") or img_el.get("data-src") or ""
+                if src:
+                    image_url = src if src.startswith("http") else f"{SITE_URL}{src}"
+            if not image_url:
+                image_url = og_image_url
+
             races.append({
                 "id": time_el["datetime"],
                 "title": title_el.get_text(strip=True) if title_el else "?",
                 "date": time_el["datetime"],
                 "tags": [t.get_text(strip=True) for t in tag_els],
                 "description": desc_el.get_text(strip=True) if desc_el else "",
+                "image": image_url,
             })
         return races
 
-    # ── Annonce d'une nouvelle course ─────────────────────────────
+    # ── Annonce ───────────────────────────────────────────────────
 
     async def _announce_race(self, race: dict):
         channel = self.bot.get_channel(RACES_CHANNEL_ID)
@@ -94,13 +145,14 @@ class Calendar(commands.Cog):
             return
 
         guild = channel.guild
-
         role = await guild.create_role(name=race["title"], mentionable=True)
 
         category = guild.get_channel(RACES_CATEGORY_ID)
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+            role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            ),
         }
         race_channel = await guild.create_text_channel(
             name=_slugify(race["title"]),
@@ -108,8 +160,8 @@ class Calendar(commands.Cog):
             overwrites=overwrites,
         )
 
-        msg = await channel.send(embed=self._build_embed(race, race_channel))
-        await msg.add_reaction(REACTION_EMOJI)
+        view = RaceRegistrationView(race["title"], role.id)
+        msg = await channel.send(embed=self._build_embed(race, race_channel), view=view)
 
         self._save_message(str(msg.id), {
             "role_id": role.id,
@@ -154,47 +206,7 @@ class Calendar(commands.Cog):
     async def before_check(self):
         await self.bot.wait_until_ready()
 
-    # ── Réaction ajoutée → attribuer le rôle ─────────────────────
-
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        if payload.user_id == self.bot.user.id:
-            return
-        messages = self._load_messages()
-        if str(payload.message_id) not in messages:
-            return
-        guild = self.bot.get_guild(payload.guild_id)
-        if not guild:
-            return
-        race_data = messages[str(payload.message_id)]
-        role = guild.get_role(race_data["role_id"])
-        try:
-            member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-        except discord.NotFound:
-            return
-        if role and member:
-            await member.add_roles(role)
-
-    # ── Réaction retirée → retirer le rôle ───────────────────────
-
-    @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
-        messages = self._load_messages()
-        if str(payload.message_id) not in messages:
-            return
-        guild = self.bot.get_guild(payload.guild_id)
-        if not guild:
-            return
-        race_data = messages[str(payload.message_id)]
-        role = guild.get_role(race_data["role_id"])
-        try:
-            member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
-        except discord.NotFound:
-            return
-        if role and member:
-            await member.remove_roles(role)
-
-    # ── Construction de l'embed ───────────────────────────────────
+    # ── Embed ─────────────────────────────────────────────────────
 
     def _build_embed(self, race: dict, race_channel=None) -> discord.Embed:
         dt = datetime.fromisoformat(race["date"].replace("Z", "+00:00")).astimezone(PARIS)
@@ -210,11 +222,8 @@ class Calendar(commands.Cog):
             embed.add_field(name="🏎️ Infos", value=" · ".join(race["tags"]), inline=False)
         if race_channel:
             embed.add_field(name="💬 Salon", value=race_channel.mention, inline=False)
-        embed.add_field(
-            name="📌 Inscription",
-            value=f"Réagissez avec {REACTION_EMOJI} pour accéder au salon de la course",
-            inline=False,
-        )
+        if race.get("image"):
+            embed.set_image(url=race["image"])
         embed.set_footer(text="Par amour du spin")
         return embed
 
