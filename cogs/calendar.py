@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 SITE_URL = os.getenv("RACES_SITE_URL", "http://82.165.167.165")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
 RACES_CATEGORY_ID = int(os.getenv("RACES_CATEGORY_ID", "1399427481945247817"))
+RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
 DATA_FILE = "data/known_races.json"
 DATA_MESSAGES = "data/race_messages.json"
 PARIS = ZoneInfo("Europe/Paris")
@@ -154,6 +155,11 @@ class Calendar(commands.Cog):
                 view_channel=True, send_messages=True, read_message_history=True
             ),
         }
+        staff_role = guild.get_role(RACES_STAFF_ROLE_ID)
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
         race_channel = await guild.create_text_channel(
             name=_slugify(race["title"]),
             category=category,
