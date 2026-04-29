@@ -225,8 +225,10 @@ class Calendar(commands.Cog):
     # ── Commandes admin ───────────────────────────────────────────
 
     @discord.app_commands.command(name="coursediag", description="Diagnostique le système d'annonces de courses")
-    @discord.app_commands.default_permissions(administrator=True)
     async def course_diagnostic(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True)
         lines = []
 
@@ -259,8 +261,10 @@ class Calendar(commands.Cog):
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
     @discord.app_commands.command(name="coursereset", description="Réinitialise la liste des courses connues (force les annonces)")
-    @discord.app_commands.default_permissions(administrator=True)
     async def course_reset(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
+            return
         import os as _os
         if _os.path.exists(DATA_FILE):
             _os.remove(DATA_FILE)
@@ -272,8 +276,10 @@ class Calendar(commands.Cog):
             await interaction.response.send_message("Aucun fichier de courses connues trouvé.", ephemeral=True)
 
     @discord.app_commands.command(name="courseforcer", description="Force l'annonce immédiate des courses non encore annoncées")
-    @discord.app_commands.default_permissions(administrator=True)
     async def course_forcer(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True)
         if not RACES_CHANNEL_ID:
             await interaction.followup.send("RACES_CHANNEL_ID non configuré.", ephemeral=True)
