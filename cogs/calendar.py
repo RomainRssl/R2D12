@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-SITE_URL = os.getenv("RACES_SITE_URL", "http://82.165.167.165")
+SITE_URL = os.getenv("RACES_SITE_URL", "https://paramourduspin.fun")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
 RACES_CATEGORY_ID = int(os.getenv("RACES_CATEGORY_ID", "1399427481945247817"))
 RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
@@ -192,7 +192,8 @@ class Calendar(commands.Cog):
                     SITE_URL, timeout=aiohttp.ClientTimeout(total=10)
                 ) as resp:
                     html = await resp.text()
-        except Exception:
+        except Exception as e:
+            logger.error("Impossible de joindre %s : %s", SITE_URL, e)
             return
 
         races = self._parse_races(html)
@@ -220,6 +221,90 @@ class Calendar(commands.Cog):
     @check_new_races.before_loop
     async def before_check(self):
         await self.bot.wait_until_ready()
+
+    # ── Commandes admin ───────────────────────────────────────────
+
+    @discord.app_commands.command(name="course-diagnostic", description="Diagnostique le système d'annonces de courses")
+    @discord.app_commands.default_permissions(administrator=True)
+    async def course_diagnostic(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        lines = []
+
+        lines.append(f"**RACES_CHANNEL_ID** : `{RACES_CHANNEL_ID}`")
+        if RACES_CHANNEL_ID:
+            try:
+                ch = await self.bot.fetch_channel(RACES_CHANNEL_ID)
+                lines.append(f"Channel trouvé : {ch.mention}")
+            except Exception as e:
+                lines.append(f"Channel **introuvable** : {e}")
+        else:
+            lines.append("Channel **non configuré** — définir `RACES_CHANNEL_ID` dans `.env`")
+
+        lines.append(f"\n**Site** : `{SITE_URL}`")
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(SITE_URL, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    html = await r.text()
+            races = self._parse_races(html)
+            lines.append(f"Site accessible — {len(races)} course(s) trouvée(s)")
+            known = self._load_known() or set()
+            new = [r for r in races if r["id"] not in known]
+            lines.append(f"Courses connues : {len(known)} | Nouvelles : **{len(new)}**")
+            for r in races:
+                status = "✅ connue" if r["id"] in known else "🆕 nouvelle"
+                lines.append(f"  • {r['title']} — {status}")
+        except Exception as e:
+            lines.append(f"Site **inaccessible** : {e}")
+
+        await interaction.followup.send("\n".join(lines), ephemeral=True)
+
+    @discord.app_commands.command(name="course-reset", description="Réinitialise la liste des courses connues (force les annonces)")
+    @discord.app_commands.default_permissions(administrator=True)
+    async def course_reset(self, interaction: discord.Interaction):
+        import os as _os
+        if _os.path.exists(DATA_FILE):
+            _os.remove(DATA_FILE)
+            await interaction.response.send_message(
+                "Liste réinitialisée. Au prochain scan (≤5 min), toutes les courses actuelles seront annoncées.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message("Aucun fichier de courses connues trouvé.", ephemeral=True)
+
+    @discord.app_commands.command(name="course-forcer", description="Force l'annonce immédiate des courses non encore annoncées")
+    @discord.app_commands.default_permissions(administrator=True)
+    async def course_forcer(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if not RACES_CHANNEL_ID:
+            await interaction.followup.send("RACES_CHANNEL_ID non configuré.", ephemeral=True)
+            return
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(SITE_URL, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    html = await r.text()
+        except Exception as e:
+            await interaction.followup.send(f"Site inaccessible : {e}", ephemeral=True)
+            return
+
+        races = self._parse_races(html)
+        known = self._load_known() or set()
+        new_races = [r for r in races if r["id"] not in known]
+
+        if not new_races:
+            await interaction.followup.send("Aucune nouvelle course à annoncer.", ephemeral=True)
+            return
+
+        count = 0
+        for race in new_races:
+            try:
+                await self._announce_race(race)
+                known.add(race["id"])
+                count += 1
+            except Exception as e:
+                logger.error("Erreur annonce forcée '%s' : %s", race.get("title"), e)
+
+        self._save_known(known)
+        await interaction.followup.send(f"{count} course(s) annoncée(s).", ephemeral=True)
 
     # ── Embed ─────────────────────────────────────────────────────
 
