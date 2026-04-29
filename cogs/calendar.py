@@ -2,12 +2,15 @@ import os
 import json
 import re
 import unicodedata
+import logging
 import aiohttp
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from discord.ext import commands, tasks
 import discord
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 SITE_URL = os.getenv("RACES_SITE_URL", "http://82.165.167.165")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
@@ -141,8 +144,10 @@ class Calendar(commands.Cog):
     # ── Annonce ───────────────────────────────────────────────────
 
     async def _announce_race(self, race: dict):
-        channel = self.bot.get_channel(RACES_CHANNEL_ID)
-        if not channel:
+        try:
+            channel = await self.bot.fetch_channel(RACES_CHANNEL_ID)
+        except (discord.NotFound, discord.Forbidden) as e:
+            logger.error("Impossible de trouver le channel %s : %s", RACES_CHANNEL_ID, e)
             return
 
         guild = channel.guild
@@ -203,7 +208,11 @@ class Calendar(commands.Cog):
             return
 
         for race in new_races:
-            await self._announce_race(race)
+            try:
+                await self._announce_race(race)
+            except Exception as e:
+                logger.error("Erreur lors de l'annonce de '%s' : %s", race.get("title"), e)
+                continue
             known.add(race["id"])
 
         self._save_known(known)
