@@ -211,9 +211,11 @@ class Calendar(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.check_new_races.start()
+        self.check_race_reminders.start()
 
     def cog_unload(self):
         self.check_new_races.cancel()
+        self.check_race_reminders.cancel()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -304,6 +306,30 @@ class Calendar(commands.Cog):
                 if link_el else None
             )
 
+            # Nom du serveur et mot de passe (champs optionnels ajoutés au site)
+            server_name = ""
+            password = ""
+            for el in article.find_all(["p", "span", "div"]):
+                label = el.get_text(strip=True).lower()
+                # Chercher un élément dont le texte est un label, puis prendre le suivant
+                if label in ("nom du serveur", "serveur", "server"):
+                    nxt = el.find_next_sibling()
+                    if nxt:
+                        server_name = nxt.get_text(strip=True)
+                elif label in ("mot de passe", "password", "mdp"):
+                    nxt = el.find_next_sibling()
+                    if nxt:
+                        password = nxt.get_text(strip=True)
+            # Fallback : chercher dans les attributs data-* ou aria-label
+            if not server_name:
+                el = article.find(attrs={"data-server": True})
+                if el:
+                    server_name = el["data-server"]
+            if not password:
+                el = article.find(attrs={"data-password": True})
+                if el:
+                    password = el["data-password"]
+
             races.append({
                 "id": time_el["datetime"],
                 "title": title_el.get_text(strip=True) if title_el else "?",
@@ -314,6 +340,8 @@ class Calendar(commands.Cog):
                 "description": desc_el.get_text(strip=True) if desc_el else "",
                 "image": image_url,
                 "url": race_url,
+                "server_name": server_name,
+                "password": password,
             })
         return races
 
@@ -402,6 +430,10 @@ class Calendar(commands.Cog):
             "role_id": role.id,
             "channel_id": race_channel.id,
             "title": race["title"],
+            "date": race["date"],
+            "server_name": race.get("server_name", ""),
+            "password": race.get("password", ""),
+            "notified_1h": False,
         })
 
         # Premier message du channel privé : infos de la course (sans bouton d'inscription)
@@ -474,6 +506,70 @@ class Calendar(commands.Cog):
 
     @check_new_races.before_loop
     async def before_check(self):
+        await self.bot.wait_until_ready()
+
+    # ── Rappel 1h avant la course ─────────────────────────────────
+
+    @tasks.loop(minutes=1)
+    async def check_race_reminders(self):
+        """Envoie les infos serveur/MDP dans le channel privé 1h avant chaque course."""
+        now = datetime.now(PARIS)
+        messages = self._load_messages()
+        updated = False
+
+        for msg_id, data in messages.items():
+            if data.get("notified_1h"):
+                continue
+            if not data.get("date") or not data.get("channel_id"):
+                continue
+            if not data.get("server_name") and not data.get("password"):
+                continue   # rien à annoncer
+
+            try:
+                race_dt = datetime.fromisoformat(
+                    data["date"].replace("Z", "+00:00")
+                ).astimezone(PARIS)
+            except ValueError:
+                continue
+
+            delta = race_dt - now
+            # Fenêtre : entre 55 et 65 minutes avant le départ
+            if not (timedelta(minutes=55) <= delta <= timedelta(minutes=65)):
+                continue
+
+            try:
+                channel = await self.bot.fetch_channel(int(data["channel_id"]))
+            except Exception as e:
+                logger.warning("Rappel 1h — channel introuvable (%s) : %s", data["channel_id"], e)
+                data["notified_1h"] = True   # éviter de réessayer indéfiniment
+                updated = True
+                continue
+
+            embed = discord.Embed(
+                title=f"🚦 Départ dans 1 heure — {data['title']}",
+                color=0xE63946,
+            )
+            if data.get("server_name"):
+                embed.add_field(name="🖥️ Nom du serveur", value=data["server_name"], inline=False)
+            if data.get("password"):
+                embed.add_field(name="🔒 Mot de passe", value=data["password"], inline=False)
+            embed.set_footer(text="Par amour du spin")
+
+            try:
+                await channel.send(embed=embed)
+                logger.info("Rappel 1h envoyé pour '%s'", data["title"])
+            except Exception as e:
+                logger.error("Rappel 1h — impossible d'envoyer dans %s : %s", data["channel_id"], e)
+
+            data["notified_1h"] = True
+            updated = True
+
+        if updated:
+            with open(DATA_MESSAGES, "w") as f:
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+
+    @check_race_reminders.before_loop
+    async def before_reminders(self):
         await self.bot.wait_until_ready()
 
     # ── Commandes admin ───────────────────────────────────────────
