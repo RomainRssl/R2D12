@@ -8,7 +8,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from discord.ext import commands, tasks
 import discord
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -259,131 +258,57 @@ class Calendar(commands.Cog):
         with open(DATA_MESSAGES, "w") as f:
             json.dump(messages, f)
 
-    # ── HTML scraping ─────────────────────────────────────────────
+    # ── API /api/events ───────────────────────────────────────────
 
-    def _parse_races(self, html: str) -> list:
-        soup = BeautifulSoup(html, "html.parser")
-
-        og_image = soup.find("meta", property="og:image")
-        og_image_url = og_image.get("content") if og_image else None
-
-        races = []
-        for article in soup.find_all("article"):
-            time_el = article.find("time")
-            if not time_el or not time_el.get("datetime"):
-                continue
-            title_el = article.find("h3")
-            desc_el = article.find("p", class_=lambda c: c and "line-clamp-2" in c)
-            def _spans(color):
-                return article.find_all(
-                    "span", class_=lambda c: c and color in c
-                )
-
-            simulator_els = _spans(TAG_SIMULATOR)
-            circuit_els   = _spans(TAG_CIRCUIT)
-            class_els     = _spans(TAG_CLASSES)
-
-            simulator = simulator_els[0].get_text(strip=True) if simulator_els else ""
-            circuit   = circuit_els[0].get_text(strip=True) if circuit_els else ""
-            classes   = [
-                _clean_class_name(el.get_text(strip=True)) for el in class_els
-            ]
-            classes = [c for c in classes if c]
-
-            img_el = article.find("img")
-            image_url = None
-            if img_el:
-                src = img_el.get("src") or img_el.get("data-src") or ""
-                if src:
-                    image_url = src if src.startswith("http") else f"{SITE_URL}{src}"
-            if not image_url:
-                image_url = og_image_url
-
-            # URL de la page de détail
-            link_el = article.find("a", href=lambda h: h and "/courses/" in h)
-            race_url = (
-                (link_el["href"] if link_el["href"].startswith("http") else f"{SITE_URL}{link_el['href']}")
-                if link_el else None
-            )
-
-            # Nom du serveur et mot de passe (champs optionnels ajoutés au site)
-            server_name = ""
-            password = ""
-            for el in article.find_all(["p", "span", "div"]):
-                label = el.get_text(strip=True).lower()
-                # Chercher un élément dont le texte est un label, puis prendre le suivant
-                if label in ("nom du serveur", "serveur", "server"):
-                    nxt = el.find_next_sibling()
-                    if nxt:
-                        server_name = nxt.get_text(strip=True)
-                elif label in ("mot de passe", "password", "mdp"):
-                    nxt = el.find_next_sibling()
-                    if nxt:
-                        password = nxt.get_text(strip=True)
-            # Fallback : chercher dans les attributs data-* ou aria-label
-            if not server_name:
-                el = article.find(attrs={"data-server": True})
-                if el:
-                    server_name = el["data-server"]
-            if not password:
-                el = article.find(attrs={"data-password": True})
-                if el:
-                    password = el["data-password"]
-
-            races.append({
-                "id": time_el["datetime"],
-                "title": title_el.get_text(strip=True) if title_el else "?",
-                "date": time_el["datetime"],
-                "simulator": simulator,
-                "circuit": circuit,
-                "classes": classes,
-                "description": desc_el.get_text(strip=True) if desc_el else "",
-                "image": image_url,
-                "url": race_url,
-                "server_name": server_name,
-                "password": password,
-            })
-        return races
-
-    # ── Description complète (page de détail) ─────────────────────
-
-    async def _fetch_full_description(self, url: str) -> str:
-        """Récupère la description complète depuis la page de détail de la course."""
+    async def _fetch_races_api(self) -> list:
+        """Récupère les courses depuis l'API /api/events (inclut serverName et serverPassword)."""
         try:
             async with aiohttp.ClientSession() as s:
-                async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                async with s.get(
+                    f"{SITE_URL}/api/events",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                    headers={"Accept": "application/json"},
+                ) as r:
                     if r.status != 200:
-                        return ""
-                    html = await r.text()
-            soup = BeautifulSoup(html, "html.parser")
+                        logger.error("API /api/events — statut %s", r.status)
+                        return []
+                    data = await r.json()
 
-            # 1. Bloc prose (rich text Next.js classique)
-            prose = soup.find("div", class_=lambda c: c and "prose" in c)
-            if prose:
-                return prose.get_text(separator="\n", strip=True)
+            races = []
+            for event in data:
+                # cars est un JSON string dans l'API
+                try:
+                    cars_raw = json.loads(event.get("cars") or "[]")
+                except (json.JSONDecodeError, TypeError):
+                    cars_raw = []
+                classes = [_clean_class_name(c) for c in cars_raw if c]
 
-            # 2. Chercher un <p> ou <div> contenant la description
-            #    (hors des boîtes de méta : date, circuit, etc.)
-            for sel in [
-                lambda c: c and "description" in c,
-                lambda c: c and "content" in c,
-                lambda c: c and "text-gray" in c,
-            ]:
-                el = soup.find(["p", "div"], class_=sel)
-                if el:
-                    text = el.get_text(strip=True)
-                    if len(text) > 20:        # ignorer les textes trop courts
-                        return text
+                image = event.get("imageUrl") or ""
+                if image and not image.startswith("http"):
+                    image = f"{SITE_URL}{image}"
 
-            # 3. Fallback : meta description
-            meta = soup.find("meta", attrs={"name": "description"})
-            if meta and meta.get("content"):
-                return meta["content"]
+                desc = event.get("description") or ""
+                if len(desc) > 4096:
+                    desc = desc[:4093] + "…"
+
+                races.append({
+                    "id":          event["date"],        # datetime comme ID (continuité)
+                    "title":       event["title"],
+                    "date":        event["date"],
+                    "simulator":   event.get("game", "") or "",
+                    "circuit":     event.get("track", "") or "",
+                    "classes":     classes,
+                    "description": desc,
+                    "image":       image,
+                    "server_name": event.get("serverName", "") or "",
+                    "password":    event.get("serverPassword", "") or "",
+                })
+            logger.info("API /api/events : %d course(s) récupérée(s)", len(races))
+            return races
 
         except Exception as e:
-            logger.warning("Impossible de récupérer la description depuis %s : %s", url, e)
-
-        return ""
+            logger.error("Erreur API /api/events : %s", e)
+            return []
 
     # ── Annonce ───────────────────────────────────────────────────
 
@@ -393,13 +318,6 @@ class Calendar(commands.Cog):
         except (discord.NotFound, discord.Forbidden) as e:
             logger.error("Impossible de trouver le channel %s : %s", RACES_CHANNEL_ID, e)
             return
-
-        # Récupérer la description complète depuis la page de détail
-        if race.get("url"):
-            full_desc = await self._fetch_full_description(race["url"])
-            if full_desc:
-                race = {**race, "description": full_desc}
-                logger.info("Description complète récupérée pour '%s' (%d car.)", race["title"], len(full_desc))
 
         guild = channel.guild
         role = await guild.create_role(name=race["title"], mentionable=True)
@@ -472,17 +390,11 @@ class Calendar(commands.Cog):
     async def check_new_races(self):
         if not RACES_CHANNEL_ID:
             return
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    SITE_URL, timeout=aiohttp.ClientTimeout(total=10)
-                ) as resp:
-                    html = await resp.text()
-        except Exception as e:
-            logger.error("Impossible de joindre %s : %s", SITE_URL, e)
+
+        races = await self._fetch_races_api()
+        if not races:
             return
 
-        races = self._parse_races(html)
         known = self._load_known()
         current_ids = {r["id"] for r in races}
 
@@ -602,24 +514,26 @@ class Calendar(commands.Cog):
         else:
             lines.append("Channel **non configuré** — définir `RACES_CHANNEL_ID` dans `.env`")
 
-        lines.append(f"\n**Site** : `{SITE_URL}`")
+        lines.append(f"\n**API** : `{SITE_URL}/api/events`")
         try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(SITE_URL, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                    html = await r.text()
-            races = self._parse_races(html)
-            lines.append(f"Site accessible — {len(races)} course(s) trouvée(s)")
-            known = self._load_known() or set()
-            new = [r for r in races if r["id"] not in known]
-            lines.append(f"Courses connues : {len(known)} | Nouvelles : **{len(new)}**")
-            for r in races:
-                status = "✅ connue" if r["id"] in known else "🆕 nouvelle"
-                lines.append(f"  • **{r['title']}** — {status}")
-                lines.append(f"    🎮 {r.get('simulator') or '—'}  🏟️ {r.get('circuit') or '—'}")
-                classes_str = ", ".join(r["classes"]) if r["classes"] else "*aucune*"
-                lines.append(f"    🏎️ Classes : {classes_str}")
+            races = await self._fetch_races_api()
+            if races:
+                lines.append(f"API accessible — {len(races)} course(s) trouvée(s)")
+                known = self._load_known() or set()
+                new = [r for r in races if r["id"] not in known]
+                lines.append(f"Courses connues : {len(known)} | Nouvelles : **{len(new)}**")
+                for r in races:
+                    status = "✅ connue" if r["id"] in known else "🆕 nouvelle"
+                    lines.append(f"  • **{r['title']}** — {status}")
+                    lines.append(f"    🎮 {r.get('simulator') or '—'}  🏟️ {r.get('circuit') or '—'}")
+                    classes_str = ", ".join(r["classes"]) if r["classes"] else "*aucune*"
+                    lines.append(f"    🏎️ Classes : {classes_str}")
+                    if r.get("server_name"):
+                        lines.append(f"    🖥️ Serveur : {r['server_name']}")
+            else:
+                lines.append("API **inaccessible** ou aucune course")
         except Exception as e:
-            lines.append(f"Site **inaccessible** : {e}")
+            lines.append(f"Erreur : {e}")
 
         await interaction.followup.send("\n".join(lines), ephemeral=True)
 
@@ -658,15 +572,11 @@ class Calendar(commands.Cog):
         if not RACES_CHANNEL_ID:
             await interaction.followup.send("RACES_CHANNEL_ID non configuré.", ephemeral=True)
             return
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(SITE_URL, timeout=aiohttp.ClientTimeout(total=10)) as r:
-                    html = await r.text()
-        except Exception as e:
-            await interaction.followup.send(f"Site inaccessible : {e}", ephemeral=True)
+        races = await self._fetch_races_api()
+        if not races:
+            await interaction.followup.send("API inaccessible ou aucune course.", ephemeral=True)
             return
 
-        races = self._parse_races(html)
         known = self._load_known() or set()
         new_races = [r for r in races if r["id"] not in known]
 
