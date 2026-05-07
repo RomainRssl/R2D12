@@ -4,7 +4,7 @@ import re
 import unicodedata
 import logging
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from discord.ext import commands, tasks
 import discord
@@ -430,7 +430,7 @@ class Calendar(commands.Cog):
         updated = False
 
         # Charger les données API une seule fois pour enrichir les entrées manquantes
-        api_races: list | None = None
+        api_races = None
 
         for msg_id, data in messages.items():
             if data.get("notified_1h"):
