@@ -404,6 +404,9 @@ class Calendar(commands.Cog):
             "title": race["title"],
         })
 
+        # Premier message du channel privé : infos de la course (sans bouton d'inscription)
+        await race_channel.send(embed=self._build_embed(race))
+
         # Sélection de classe dans le channel privé (si multiclasse)
         classes = race.get("classes", [])
         if len(classes) >= 2:
