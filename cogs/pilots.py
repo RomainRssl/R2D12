@@ -115,12 +115,11 @@ class Pilots(commands.Cog):
                 )
                 if badge:
                     main_class = badge.get_text(strip=True)
-                    # Chercher le rang (#N) parmi les siblings — ignorer les emojis de tier
+                    # Chercher le rang (#N) — span dont le texte est exactement "#N"
                     for sib in badge.find_next_siblings("span"):
                         text = sib.get_text(strip=True)
-                        m = re.search(r"(\d+)", text)
-                        if m and len(text) <= 8:
-                            main_rank = f"#{m.group(1)}"
+                        if re.fullmatch(r"#\d+", text):
+                            main_rank = text
                             break
                     break
                 parent = parent.parent
@@ -148,14 +147,13 @@ class Pilots(commands.Cog):
 
             class_name = class_el.get_text(strip=True)
 
-            # Rang dans cette classe (#N) — chercher le premier sibling span
-            # contenant uniquement des chiffres (avec ou sans '#')
+            # Rang dans cette classe (#N) — chercher dans tout le card
+            # le premier span dont le texte est exactement "#N" (ex: "#12")
             class_rank = ""
-            for sib in class_el.find_next_siblings("span"):
-                text = sib.get_text(strip=True)
-                m = re.search(r"(\d+)", text)
-                if m and len(text) <= 8:   # court → c'est un rang, pas du texte
-                    class_rank = f"#{m.group(1)}"
+            for span in card.find_all("span"):
+                text = span.get_text(strip=True)
+                if re.fullmatch(r"#\d+", text):
+                    class_rank = text
                     break
 
             # Tier (Bronze / Silver…)
