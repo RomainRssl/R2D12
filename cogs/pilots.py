@@ -1,4 +1,5 @@
 import logging
+import re
 import urllib.parse
 from datetime import datetime, timedelta
 
@@ -26,6 +27,21 @@ def _tier_icon(tier: str) -> str:
         if key in tier.lower():
             return icon
     return "🏅"
+
+
+def _clean_tier(tier: str) -> str:
+    """Retire le préfixe 'Ladder' et normalise la casse (ex: 'LadderBronze' → 'Bronze')."""
+    return re.sub(r"(?i)ladder", "", tier).strip()
+
+
+def _normalize_stat(value: str) -> str:
+    """Normalise les valeurs de stats HTML :
+    - Espace entre chiffre et lettre : '14 475Crédits' → '14 475 Crédits'
+    - Supprime l'espace après '/' : '53/ 200' → '53/200'
+    """
+    value = re.sub(r"(\d)([A-Za-zÀ-ÿ])", r"\1 \2", value)
+    value = re.sub(r"/\s+", "/", value)
+    return value
 
 
 class Pilots(commands.Cog):
@@ -114,7 +130,7 @@ class Pilots(commands.Cog):
             label_el = box.find("p", class_=lambda c: c and "uppercase" in c)
             value_el = box.find("p", class_=lambda c: c and "text-xl" in c)
             if label_el and value_el:
-                stats[label_el.get_text(strip=True)] = value_el.get_text(strip=True)
+                stats[label_el.get_text(strip=True)] = _normalize_stat(value_el.get_text(strip=True))
 
         # Progression par classe
         classes = []
@@ -141,7 +157,7 @@ class Pilots(commands.Cog):
             for span in card.find_all("span"):
                 t = span.get_text(strip=True)
                 if any(x in t.lower() for x in ["bronze", "silver", "gold", "platinum"]):
-                    tier = t
+                    tier = _clean_tier(t)
                     break
 
             # XP valeur
@@ -235,7 +251,7 @@ class Pilots(commands.Cog):
                 if c["ladder_next"]:
                     lines.append(f"↗️ {c['ladder_next']}")
                 embed.add_field(
-                    name=f"{icon} {c['class']}  ·  {c['tier']}  {c['rank']}",
+                    name=f"{c['class']}  ·  {c['tier']}  {c['rank']}".strip(),
                     value="\n".join(lines) or "—",
                     inline=True,
                 )
