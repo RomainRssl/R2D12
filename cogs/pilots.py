@@ -86,6 +86,25 @@ class Pilots(commands.Cog):
                 rank = t
                 break
 
+        # Badge classe principale + rang (juste sous le nom)
+        main_class = ""
+        main_rank = ""
+        if h1:
+            parent = h1.parent
+            for _ in range(4):
+                if parent is None:
+                    break
+                badge = parent.find(
+                    "span", class_=lambda c: c and "font-mono" in c and "text-xs" in c
+                )
+                if badge:
+                    main_class = badge.get_text(strip=True)
+                    sib = badge.find_next_sibling("span")
+                    if sib:
+                        main_rank = sib.get_text(strip=True)
+                    break
+                parent = parent.parent
+
         # Boîtes de stats (argent / réputation / courses)
         stats: dict[str, str] = {}
         for box in soup.find_all(
@@ -108,6 +127,14 @@ class Pilots(commands.Cog):
                 continue
 
             class_name = class_el.get_text(strip=True)
+
+            # Rang dans cette classe (#N)
+            class_rank = ""
+            rank_sib = class_el.find_next_sibling(
+                "span", class_=lambda c: c and "text-brand-muted" in c
+            )
+            if rank_sib:
+                class_rank = rank_sib.get_text(strip=True)
 
             # Tier (Bronze / Silver…)
             tier = ""
@@ -154,6 +181,7 @@ class Pilots(commands.Cog):
             classes.append(
                 {
                     "class": class_name,
+                    "rank": class_rank,
                     "tier": tier,
                     "xp": xp,
                     "xp_next": xp_next,
@@ -168,8 +196,17 @@ class Pilots(commands.Cog):
             url=url,
             color=0xE63946,
         )
+        desc_parts = []
+        if main_class or main_rank:
+            badge = f"**{main_class}**" if main_class else ""
+            if main_rank:
+                badge += f"  `{main_rank}`"
+            if badge:
+                desc_parts.append(f"🏎️ {badge.strip()}")
         if rank:
-            embed.description = f"🏆 **{rank}**"
+            desc_parts.append(f"🏆 **{rank}**")
+        if desc_parts:
+            embed.description = "\n".join(desc_parts)
 
         if stats.get("ARGENT"):
             embed.add_field(name="💰 Argent", value=stats["ARGENT"], inline=True)
@@ -187,6 +224,8 @@ class Pilots(commands.Cog):
             for c in classes:
                 icon = _tier_icon(c["tier"])
                 lines = []
+                if c["rank"]:
+                    lines.append(f"**Classement :** `{c['rank']}`")
                 if c["xp"]:
                     lines.append(f"**XP :** {c['xp']}")
                 if c["xp_next"]:
@@ -196,7 +235,7 @@ class Pilots(commands.Cog):
                 if c["ladder_next"]:
                     lines.append(f"↗️ {c['ladder_next']}")
                 embed.add_field(
-                    name=f"{icon} {c['class']}  ·  {c['tier']}",
+                    name=f"{icon} {c['class']}  ·  {c['tier']}  {c['rank']}",
                     value="\n".join(lines) or "—",
                     inline=True,
                 )
