@@ -115,9 +115,12 @@ class Pilots(commands.Cog):
                 )
                 if badge:
                     main_class = badge.get_text(strip=True)
-                    sib = badge.find_next_sibling("span")
-                    if sib:
-                        main_rank = sib.get_text(strip=True)
+                    # Chercher le rang (#N) parmi les siblings — ignorer les emojis de tier
+                    for sib in badge.find_next_siblings("span"):
+                        text = sib.get_text(strip=True)
+                        if re.match(r"^#\d+$", text):
+                            main_rank = text
+                            break
                     break
                 parent = parent.parent
 
@@ -144,13 +147,14 @@ class Pilots(commands.Cog):
 
             class_name = class_el.get_text(strip=True)
 
-            # Rang dans cette classe (#N)
+            # Rang dans cette classe (#N) — on cherche le premier sibling span
+            # dont le texte correspond à "#<chiffres>" pour éviter de capturer les emojis de tier
             class_rank = ""
-            rank_sib = class_el.find_next_sibling(
-                "span", class_=lambda c: c and "text-brand-muted" in c
-            )
-            if rank_sib:
-                class_rank = rank_sib.get_text(strip=True)
+            for sib in class_el.find_next_siblings("span"):
+                text = sib.get_text(strip=True)
+                if re.match(r"^#\d+$", text):
+                    class_rank = text
+                    break
 
             # Tier (Bronze / Silver…)
             tier = ""
