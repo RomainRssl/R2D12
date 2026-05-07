@@ -251,7 +251,7 @@ class Pilots(commands.Cog):
                 if c["ladder_next"]:
                     lines.append(f"↗️ {c['ladder_next']}")
                 embed.add_field(
-                    name=f"{c['class']}  ·  {c['tier']}  {c['rank']}".strip(),
+                    name=f"{c['class']}  ·  Classement {c['tier']}  {c['rank']}".strip(),
                     value="\n".join(lines) or "—",
                     inline=True,
                 )
