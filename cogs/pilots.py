@@ -118,8 +118,9 @@ class Pilots(commands.Cog):
                     # Chercher le rang (#N) parmi les siblings — ignorer les emojis de tier
                     for sib in badge.find_next_siblings("span"):
                         text = sib.get_text(strip=True)
-                        if re.match(r"^#\d+$", text):
-                            main_rank = text
+                        m = re.search(r"(\d+)", text)
+                        if m and len(text) <= 8:
+                            main_rank = f"#{m.group(1)}"
                             break
                     break
                 parent = parent.parent
@@ -147,13 +148,14 @@ class Pilots(commands.Cog):
 
             class_name = class_el.get_text(strip=True)
 
-            # Rang dans cette classe (#N) — on cherche le premier sibling span
-            # dont le texte correspond à "#<chiffres>" pour éviter de capturer les emojis de tier
+            # Rang dans cette classe (#N) — chercher le premier sibling span
+            # contenant uniquement des chiffres (avec ou sans '#')
             class_rank = ""
             for sib in class_el.find_next_siblings("span"):
                 text = sib.get_text(strip=True)
-                if re.match(r"^#\d+$", text):
-                    class_rank = text
+                m = re.search(r"(\d+)", text)
+                if m and len(text) <= 8:   # court → c'est un rang, pas du texte
+                    class_rank = f"#{m.group(1)}"
                     break
 
             # Tier (Bronze / Silver…)
