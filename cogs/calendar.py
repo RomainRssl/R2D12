@@ -20,7 +20,10 @@ DATA_FILE = "data/known_races.json"
 DATA_MESSAGES = "data/race_messages.json"
 DATA_REGISTRATIONS = "data/race_registrations.json"
 PARIS = ZoneInfo("Europe/Paris")
-TAG_COLORS = ("text-blue-400", "text-green-400", "text-orange-400")
+TAG_SIMULATOR = "text-blue-400"   # simulateur (Le Mans ultimate, iRacing…)
+TAG_CIRCUIT   = "text-green-400"   # circuit (Spa, Le Mans…)
+TAG_CLASSES   = "text-orange-400"  # classes voiture (LMGT3, Hypercar…)
+TAG_COLORS = (TAG_SIMULATOR, TAG_CIRCUIT, TAG_CLASSES)  # rétrocompat
 
 
 def _slugify(text: str) -> str:
@@ -250,10 +253,22 @@ class Calendar(commands.Cog):
                 continue
             title_el = article.find("h3")
             desc_el = article.find("p", class_=lambda c: c and "line-clamp-2" in c)
-            tag_els = article.find_all(
-                "span",
-                class_=lambda c: c and any(color in c for color in TAG_COLORS),
-            )
+            def _spans(color):
+                return article.find_all(
+                    "span", class_=lambda c: c and color in c
+                )
+
+            simulator_els = _spans(TAG_SIMULATOR)
+            circuit_els   = _spans(TAG_CIRCUIT)
+            class_els     = _spans(TAG_CLASSES)
+
+            simulator = simulator_els[0].get_text(strip=True) if simulator_els else ""
+            circuit   = circuit_els[0].get_text(strip=True) if circuit_els else ""
+            classes   = [
+                _clean_class_name(el.get_text(strip=True)) for el in class_els
+            ]
+            classes = [c for c in classes if c]
+
             img_el = article.find("img")
             image_url = None
             if img_el:
@@ -263,15 +278,12 @@ class Calendar(commands.Cog):
             if not image_url:
                 image_url = og_image_url
 
-            raw_tags = [t.get_text(strip=True) for t in tag_els]
-            # Nettoyer les noms de classe (retire "(toute classe)" etc.)
-            classes = [_clean_class_name(t) for t in raw_tags if _clean_class_name(t)]
-
             races.append({
                 "id": time_el["datetime"],
                 "title": title_el.get_text(strip=True) if title_el else "?",
                 "date": time_el["datetime"],
-                "tags": raw_tags,
+                "simulator": simulator,
+                "circuit": circuit,
                 "classes": classes,
                 "description": desc_el.get_text(strip=True) if desc_el else "",
                 "image": image_url,
@@ -430,9 +442,10 @@ class Calendar(commands.Cog):
             lines.append(f"Courses connues : {len(known)} | Nouvelles : **{len(new)}**")
             for r in races:
                 status = "✅ connue" if r["id"] in known else "🆕 nouvelle"
-                classes_str = ", ".join(r["classes"]) if r["classes"] else "*aucune classe détectée*"
                 lines.append(f"  • **{r['title']}** — {status}")
-                lines.append(f"    Classes : {classes_str}")
+                lines.append(f"    🎮 {r.get('simulator') or '—'}  🏟️ {r.get('circuit') or '—'}")
+                classes_str = ", ".join(r["classes"]) if r["classes"] else "*aucune*"
+                lines.append(f"    🏎️ Classes : {classes_str}")
         except Exception as e:
             lines.append(f"Site **inaccessible** : {e}")
 
@@ -513,14 +526,16 @@ class Calendar(commands.Cog):
             url=SITE_URL,
         )
         embed.add_field(name="📅 Date", value=date_str, inline=False)
+        if race.get("simulator"):
+            embed.add_field(name="🎮 Simulateur", value=race["simulator"], inline=True)
+        if race.get("circuit"):
+            embed.add_field(name="🏟️ Circuit", value=race["circuit"], inline=True)
         if race.get("classes"):
             embed.add_field(
                 name="🏎️ Classes",
                 value=" · ".join(race["classes"]),
                 inline=False,
             )
-        elif race.get("tags"):
-            embed.add_field(name="🏎️ Infos", value=" · ".join(race["tags"]), inline=False)
         if race_channel:
             embed.add_field(name="💬 Salon", value=race_channel.mention, inline=False)
         if race.get("image"):
