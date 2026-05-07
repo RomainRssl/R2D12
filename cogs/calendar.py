@@ -297,6 +297,13 @@ class Calendar(commands.Cog):
             if not image_url:
                 image_url = og_image_url
 
+            # URL de la page de détail
+            link_el = article.find("a", href=lambda h: h and "/courses/" in h)
+            race_url = (
+                (link_el["href"] if link_el["href"].startswith("http") else f"{SITE_URL}{link_el['href']}")
+                if link_el else None
+            )
+
             races.append({
                 "id": time_el["datetime"],
                 "title": title_el.get_text(strip=True) if title_el else "?",
@@ -306,8 +313,49 @@ class Calendar(commands.Cog):
                 "classes": classes,
                 "description": desc_el.get_text(strip=True) if desc_el else "",
                 "image": image_url,
+                "url": race_url,
             })
         return races
+
+    # ── Description complète (page de détail) ─────────────────────
+
+    async def _fetch_full_description(self, url: str) -> str:
+        """Récupère la description complète depuis la page de détail de la course."""
+        try:
+            async with aiohttp.ClientSession() as s:
+                async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                    if r.status != 200:
+                        return ""
+                    html = await r.text()
+            soup = BeautifulSoup(html, "html.parser")
+
+            # 1. Bloc prose (rich text Next.js classique)
+            prose = soup.find("div", class_=lambda c: c and "prose" in c)
+            if prose:
+                return prose.get_text(separator="\n", strip=True)
+
+            # 2. Chercher un <p> ou <div> contenant la description
+            #    (hors des boîtes de méta : date, circuit, etc.)
+            for sel in [
+                lambda c: c and "description" in c,
+                lambda c: c and "content" in c,
+                lambda c: c and "text-gray" in c,
+            ]:
+                el = soup.find(["p", "div"], class_=sel)
+                if el:
+                    text = el.get_text(strip=True)
+                    if len(text) > 20:        # ignorer les textes trop courts
+                        return text
+
+            # 3. Fallback : meta description
+            meta = soup.find("meta", attrs={"name": "description"})
+            if meta and meta.get("content"):
+                return meta["content"]
+
+        except Exception as e:
+            logger.warning("Impossible de récupérer la description depuis %s : %s", url, e)
+
+        return ""
 
     # ── Annonce ───────────────────────────────────────────────────
 
@@ -317,6 +365,13 @@ class Calendar(commands.Cog):
         except (discord.NotFound, discord.Forbidden) as e:
             logger.error("Impossible de trouver le channel %s : %s", RACES_CHANNEL_ID, e)
             return
+
+        # Récupérer la description complète depuis la page de détail
+        if race.get("url"):
+            full_desc = await self._fetch_full_description(race["url"])
+            if full_desc:
+                race = {**race, "description": full_desc}
+                logger.info("Description complète récupérée pour '%s' (%d car.)", race["title"], len(full_desc))
 
         guild = channel.guild
         role = await guild.create_role(name=race["title"], mentionable=True)
@@ -537,11 +592,15 @@ class Calendar(commands.Cog):
     def _build_embed(self, race: dict, race_channel=None) -> discord.Embed:
         dt = datetime.fromisoformat(race["date"].replace("Z", "+00:00")).astimezone(PARIS)
         date_str = dt.strftime("%A %d %B %Y à %H:%M").capitalize()
+        description = race.get("description") or ""
+        # Discord limite les descriptions d'embed à 4096 caractères
+        if len(description) > 4096:
+            description = description[:4093] + "…"
         embed = discord.Embed(
             title=f"🏁 Nouvelle course : {race['title']}",
-            description=race.get("description") or "",
+            description=description or None,
             color=0xE63946,
-            url=SITE_URL,
+            url=race.get("url") or SITE_URL,
         )
         embed.add_field(name="📅 Date", value=date_str, inline=False)
         if race.get("simulator"):
