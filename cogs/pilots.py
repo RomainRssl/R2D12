@@ -42,6 +42,14 @@ def _clean_tier(tier: str) -> str:
     return re.sub(r"(?i)ladder", "", tier).strip()
 
 
+def _abbreviate_name(name: str) -> str:
+    """Abrège le prénom : 'Romain Roussel' → 'R Roussel'."""
+    parts = name.split()
+    if len(parts) >= 2:
+        return f"{parts[0][0]} {' '.join(parts[1:])}"
+    return name
+
+
 def _parse_rank(text: str) -> str:
     """Convertit un texte de rang en '#N' : emoji podium ou '#12' textuel."""
     if text in PODIUM_RANKS:
@@ -324,8 +332,15 @@ class Pilots(commands.Cog):
         self, interaction: discord.Interaction, current: str
     ) -> list[discord.app_commands.Choice]:
         pilots = await self._fetch_pilots()
-        matches = [p for p in pilots if current.lower() in p.lower()][:25]
-        return [discord.app_commands.Choice(name=p, value=p) for p in matches]
+        # Filtrer sur le nom abrégé ET le nom complet pour que les deux marchent à la recherche
+        matches = [
+            p for p in pilots
+            if current.lower() in p.lower() or current.lower() in _abbreviate_name(p).lower()
+        ][:25]
+        return [
+            discord.app_commands.Choice(name=_abbreviate_name(p), value=p)
+            for p in matches
+        ]
 
 
 async def setup(bot):
