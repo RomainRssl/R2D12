@@ -29,9 +29,27 @@ def _tier_icon(tier: str) -> str:
     return "🏅"
 
 
+# Les emojis de podium remplacent le numéro de rang pour les positions 1, 2, 3
+PODIUM_RANKS = {
+    "🥇": "#1",
+    "🥈": "#2",
+    "🥉": "#3",
+}
+
+
 def _clean_tier(tier: str) -> str:
     """Retire le préfixe 'Ladder' et normalise la casse (ex: 'LadderBronze' → 'Bronze')."""
     return re.sub(r"(?i)ladder", "", tier).strip()
+
+
+def _parse_rank(text: str) -> str:
+    """Convertit un texte de rang en '#N' : emoji podium ou '#12' textuel."""
+    if text in PODIUM_RANKS:
+        return PODIUM_RANKS[text]
+    m = re.search(r"#(\d+)", text)
+    if m:
+        return f"#{m.group(1)}"
+    return ""
 
 
 def _normalize_stat(value: str) -> str:
@@ -115,14 +133,13 @@ class Pilots(commands.Cog):
                 )
                 if badge:
                     main_class = badge.get_text(strip=True)
-                    # Chercher le rang (#N) — premier span ASCII contenant #N
+                    # Chercher le rang dans les siblings : emoji podium (🥇=#1) ou #N textuel
                     for sib in badge.find_next_siblings("span"):
                         text = sib.get_text(strip=True)
-                        if text.isascii():
-                            m = re.search(r"#(\d+)", text)
-                            if m:
-                                main_rank = f"#{m.group(1)}"
-                                break
+                        r = _parse_rank(text)
+                        if r:
+                            main_rank = r
+                            break
                     break
                 parent = parent.parent
 
@@ -149,16 +166,15 @@ class Pilots(commands.Cog):
 
             class_name = class_el.get_text(strip=True)
 
-            # Rang dans cette classe (#N) — chercher dans tout le card
-            # un span ASCII court contenant #N (exclut les emojis qui sont non-ASCII)
+            # Rang dans cette classe : emoji podium (🥇=#1, 🥈=#2, 🥉=#3) ou #N textuel
+            # Le span concerné a la classe "text-brand-muted" juste après le nom de classe
             class_rank = ""
-            for span in card.find_all("span"):
+            for span in card.find_all("span", class_=lambda c: c and "text-brand-muted" in c):
                 text = span.get_text(strip=True)
-                if text.isascii():
-                    m = re.search(r"#(\d+)", text)
-                    if m:
-                        class_rank = f"#{m.group(1)}"
-                        break
+                r = _parse_rank(text)
+                if r:
+                    class_rank = r
+                    break
 
             # Tier (Bronze / Silver…)
             tier = ""
