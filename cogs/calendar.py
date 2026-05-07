@@ -26,6 +26,22 @@ TAG_CLASSES   = "text-orange-400"  # classes voiture (LMGT3, Hypercar…)
 TAG_COLORS = (TAG_SIMULATOR, TAG_CIRCUIT, TAG_CLASSES)  # rétrocompat
 
 
+# Mapping classe → (ButtonStyle, emoji)
+# Discord n'a que 4 couleurs : success=vert, danger=rouge, primary=bleu, secondary=gris
+CLASS_STYLES: dict = {
+    "lmgt3":    (discord.ButtonStyle.success,   "🟢"),
+    "hypercar": (discord.ButtonStyle.danger,    "🔴"),
+    "lmp2":     (discord.ButtonStyle.primary,   "🔵"),
+    "lmp3":     (discord.ButtonStyle.secondary, "🟣"),
+    "gte":      (discord.ButtonStyle.secondary, "🟡"),
+}
+
+def _class_style(name: str):
+    """Retourne (ButtonStyle, emoji) pour une classe donnée."""
+    key = name.lower().replace(" ", "")
+    return CLASS_STYLES.get(key, (discord.ButtonStyle.secondary, "🏎️"))
+
+
 def _slugify(text: str) -> str:
     text = unicodedata.normalize("NFD", text)
     text = text.encode("ascii", "ignore").decode("ascii")
@@ -85,9 +101,11 @@ def _build_class_embed(title: str, classes_data: dict) -> discord.Embed:
 
 class ClassButton(discord.ui.Button):
     def __init__(self, class_name: str, channel_id: int):
+        style, emoji = _class_style(class_name)
         super().__init__(
             label=class_name[:80],
-            style=discord.ButtonStyle.secondary,
+            style=style,
+            emoji=emoji,
             custom_id=f"cls_{channel_id}_{_slugify(class_name)}",
         )
         self.class_name = class_name
