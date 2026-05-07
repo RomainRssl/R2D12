@@ -39,7 +39,8 @@ CLASS_STYLES: dict = {
 def _class_style(name: str):
     """Retourne (ButtonStyle, emoji) pour une classe donnée."""
     key = name.lower().replace(" ", "")
-    return CLASS_STYLES.get(key, (discord.ButtonStyle.secondary, "🏎️"))
+    _, emoji = CLASS_STYLES.get(key, (None, "🏎️"))
+    return discord.ButtonStyle.secondary, emoji
 
 
 def _slugify(text: str) -> str:
@@ -364,7 +365,6 @@ class Calendar(commands.Cog):
         classes_data = {c: [] for c in classes}
         view = ClassRegistrationView(classes, channel.id)
         msg = await channel.send(
-            content="@here Choisissez votre classe ci-dessous :",
             embed=_build_class_embed(race["title"], classes_data),
             view=view,
         )
