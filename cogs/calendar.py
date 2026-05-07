@@ -429,13 +429,28 @@ class Calendar(commands.Cog):
         messages = self._load_messages()
         updated = False
 
+        # Charger les données API une seule fois pour enrichir les entrées manquantes
+        api_races: list | None = None
+
         for msg_id, data in messages.items():
             if data.get("notified_1h"):
                 continue
             if not data.get("date") or not data.get("channel_id"):
                 continue
+
+            # Si server_name/password manquent, tenter de les récupérer depuis l'API
             if not data.get("server_name") and not data.get("password"):
-                continue   # rien à annoncer
+                if api_races is None:
+                    api_races = await self._fetch_races_api()
+                match = next((r for r in api_races if r["id"] == data.get("date")), None)
+                if match:
+                    data["server_name"] = match.get("server_name", "")
+                    data["password"]    = match.get("password", "")
+                    updated = True
+
+            # Toujours passer si aucune info serveur disponible
+            if not data.get("server_name") and not data.get("password"):
+                continue
 
             try:
                 race_dt = datetime.fromisoformat(
@@ -595,6 +610,66 @@ class Calendar(commands.Cog):
 
         self._save_known(known)
         await interaction.followup.send(f"{count} course(s) annoncée(s).", ephemeral=True)
+
+    @discord.app_commands.command(
+        name="coursemdp",
+        description="Envoie immédiatement les infos serveur/MDP dans le channel privé d'une course",
+    )
+    async def course_mdp(self, interaction: discord.Interaction):
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message(
+                "Commande réservée aux administrateurs.", ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        races_api = await self._fetch_races_api()
+        api_by_date = {r["id"]: r for r in races_api}
+
+        messages = self._load_messages()
+        sent = 0
+        skipped = 0
+
+        for msg_id, data in messages.items():
+            if data.get("notified_1h") or not data.get("channel_id"):
+                continue
+
+            # Enrichir depuis l'API si besoin
+            date_key = data.get("date", "")
+            if (not data.get("server_name") and not data.get("password")) and date_key in api_by_date:
+                api_r = api_by_date[date_key]
+                data["server_name"] = api_r.get("server_name", "")
+                data["password"]    = api_r.get("password", "")
+
+            if not data.get("server_name") and not data.get("password"):
+                skipped += 1
+                continue
+
+            try:
+                channel = await self.bot.fetch_channel(int(data["channel_id"]))
+                embed = discord.Embed(
+                    title=f"🚦 Infos serveur — {data['title']}",
+                    color=0xE63946,
+                )
+                if data.get("server_name"):
+                    embed.add_field(name="🖥️ Nom du serveur", value=data["server_name"], inline=False)
+                if data.get("password"):
+                    embed.add_field(name="🔒 Mot de passe", value=data["password"], inline=False)
+                embed.set_footer(text="Par amour du spin")
+                await channel.send(embed=embed)
+                data["notified_1h"] = True
+                sent += 1
+            except Exception as e:
+                logger.error("coursemdp — erreur channel %s : %s", data["channel_id"], e)
+                skipped += 1
+
+        with open(DATA_MESSAGES, "w") as f:
+            json.dump(messages, f, ensure_ascii=False, indent=2)
+
+        await interaction.followup.send(
+            f"✅ {sent} message(s) envoyé(s){f', {skipped} ignoré(s) (pas de données)' if skipped else ''}.",
+            ephemeral=True,
+        )
 
     # ── Embed annonce principale ──────────────────────────────────
 
