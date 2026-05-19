@@ -90,7 +90,7 @@ def _load_msgs() -> dict:
         return {}
 
 
-def _build_class_embed(title: str, classes_data: dict) -> discord.Embed:
+def _build_class_embed(title: str, classes_data: dict, classes_max: dict | None = None) -> discord.Embed:
     """Construit l'embed de sélection de classe style Apollo."""
     total = sum(len(v) for v in classes_data.values())
     embed = discord.Embed(
@@ -103,12 +103,14 @@ def _build_class_embed(title: str, classes_data: dict) -> discord.Embed:
     )
     for class_name, members in classes_data.items():
         count = len(members)
+        max_p = (classes_max or {}).get(class_name)
+        count_str = f"{count}/{max_p}" if max_p else str(count)
         if members:
             value = "\n".join(f"• {m['name']}" for m in members)
         else:
             value = "*Aucun inscrit*"
         embed.add_field(
-            name=f"🏎️ {class_name} ({count})",
+            name=f"🏎️ {class_name} ({count_str})",
             value=value,
             inline=True,
         )
@@ -174,7 +176,7 @@ class ClassButton(discord.ui.Button):
             if channel and data.get("message_id"):
                 msg = await channel.fetch_message(int(data["message_id"]))
                 await msg.edit(
-                    embed=_build_class_embed(data["title"], data["classes"])
+                    embed=_build_class_embed(data["title"], data["classes"], data.get("classes_max"))
                 )
         except Exception as e:
             logger.warning("Impossible de mettre à jour le message de classe : %s", e)
@@ -346,9 +348,18 @@ class Calendar(commands.Cog):
                     cars_raw = event.get("cars") or []
                 if not isinstance(cars_raw, list):
                     cars_raw = []
-                # Gérer le cas où chaque élément est un dict {"name": "LMGT3", ...}
-                classes = [_clean_class_name(c) for c in cars_raw if c]
-                classes = [c for c in classes if c]  # Retirer les chaînes vides
+                # Gérer le cas où chaque élément est un dict {"name": "LMGT3", "max_places": 51}
+                classes = []
+                classes_max: dict[str, int] = {}
+                for c in cars_raw:
+                    if not c:
+                        continue
+                    name = _clean_class_name(c)
+                    if not name:
+                        continue
+                    classes.append(name)
+                    if isinstance(c, dict) and c.get("max_places"):
+                        classes_max[name] = int(c["max_places"])
 
                 image = event.get("imageUrl") or ""
                 if image and not image.startswith("http"):
@@ -365,6 +376,7 @@ class Calendar(commands.Cog):
                     "simulator":   event.get("game", "") or "",
                     "circuit":     event.get("track", "") or "",
                     "classes":     classes,
+                    "classes_max": classes_max,
                     "description": desc,
                     "image":       image,
                     "server_name": event.get("serverName", "") or "",
@@ -456,9 +468,10 @@ class Calendar(commands.Cog):
         """Poste le message de sélection de classe dans le channel privé de la course."""
         classes = [c for c in classes if c][:5]
         classes_data = {c: [] for c in classes}
+        classes_max = race.get("classes_max", {})
         view = ClassRegistrationView(classes, channel.id)
         msg = await channel.send(
-            embed=_build_class_embed(race["title"], classes_data),
+            embed=_build_class_embed(race["title"], classes_data, classes_max),
             view=view,
         )
         regs = _load_registrations()
@@ -466,6 +479,7 @@ class Calendar(commands.Cog):
             "title": race["title"],
             "message_id": str(msg.id),
             "classes": classes_data,
+            "classes_max": classes_max,
         }
         _save_registrations(regs)
 
