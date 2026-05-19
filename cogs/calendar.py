@@ -15,6 +15,7 @@ SITE_URL = os.getenv("RACES_SITE_URL", "https://paramourduspin.fun")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
 RACES_CATEGORY_ID = int(os.getenv("RACES_CATEGORY_ID", "1399427481945247817"))
 RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
+RACES_NOTIFY_ROLE_ID = int(os.getenv("RACES_NOTIFY_ROLE_ID", "1394426437661888583"))
 DATA_FILE = "data/known_races.json"
 DATA_MESSAGES = "data/race_messages.json"
 DATA_REGISTRATIONS = "data/race_registrations.json"
@@ -24,6 +25,14 @@ TAG_CIRCUIT   = "text-green-400"   # circuit (Spa, Le Mans…)
 TAG_CLASSES   = "text-orange-400"  # classes voiture (LMGT3, Hypercar…)
 TAG_COLORS = (TAG_SIMULATOR, TAG_CIRCUIT, TAG_CLASSES)  # rétrocompat
 
+# Mapping classe discord → nom de rôle (pour ping à l'annonce)
+CLASS_ROLE_MAP: dict[str, str] = {
+    "lmgt3":    "gt3",
+    "hypercar": "hypercar",
+    "lmp2":     "lmp2",
+    "lmp3":     "lmp3",
+    "gte":      "gte",
+}
 
 # Mapping classe → (ButtonStyle, emoji)
 # Discord n'a que 4 couleurs : success=vert, danger=rouge, primary=bleu, secondary=gris
@@ -49,13 +58,15 @@ def _slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "-", text).strip("-")
 
 
-def _clean_class_name(name: str) -> str:
-    """Retire les suffixes parasites comme '(toute classe)'."""
-    name = re.sub(r"\(.*?\)", "", name).strip()
+def _clean_class_name(name) -> str:
+    """Retire les suffixes parasites comme '(toute classe)'. Gère str ou dict."""
+    if isinstance(name, dict):
+        name = name.get("name", "")
+    name = re.sub(r"\(.*?\)", "", str(name)).strip()
     return name
 
 
-# ── Helpers registrations (standalone pour les callbacks) ────────
+# ── Helpers standalone (pour les callbacks hors Cog) ────────────────
 
 def _load_registrations() -> dict:
     try:
@@ -69,6 +80,14 @@ def _save_registrations(data: dict):
     os.makedirs("data", exist_ok=True)
     with open(DATA_REGISTRATIONS, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _load_msgs() -> dict:
+    try:
+        with open(DATA_MESSAGES) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
 
 
 def _build_class_embed(title: str, classes_data: dict) -> discord.Embed:
@@ -197,6 +216,54 @@ class RaceButton(discord.ui.Button):
                 f"✅ Inscrit pour **{role.name}** !", ephemeral=True
             )
 
+        # Mettre à jour le compteur d'inscrits sur les deux messages
+        inscrit_count = len(role.members)
+        msgs = _load_msgs()
+        for msg_id_str, data in msgs.items():
+            if data.get("role_id") != self.role_id:
+                continue
+
+            # Mise à jour dans le channel principal
+            try:
+                main_ch = interaction.guild.get_channel(RACES_CHANNEL_ID)
+                if main_ch:
+                    main_msg = await main_ch.fetch_message(int(msg_id_str))
+                    if main_msg.embeds:
+                        emb = main_msg.embeds[0].copy()
+                        updated = False
+                        for i, field in enumerate(emb.fields):
+                            if "Inscrits" in field.name:
+                                emb.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
+                                updated = True
+                                break
+                        if not updated:
+                            emb.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
+                        view = RaceRegistrationView(data["title"], self.role_id)
+                        await main_msg.edit(embed=emb, view=view)
+            except Exception as e:
+                logger.warning("Mise à jour inscrit channel principal : %s", e)
+
+            # Mise à jour dans le channel privé de la course
+            if data.get("channel_embed_msg_id") and data.get("channel_id"):
+                try:
+                    race_ch = interaction.guild.get_channel(int(data["channel_id"]))
+                    if race_ch:
+                        ch_msg = await race_ch.fetch_message(int(data["channel_embed_msg_id"]))
+                        if ch_msg.embeds:
+                            emb2 = ch_msg.embeds[0].copy()
+                            updated2 = False
+                            for i, field in enumerate(emb2.fields):
+                                if "Inscrits" in field.name:
+                                    emb2.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
+                                    updated2 = True
+                                    break
+                            if not updated2:
+                                emb2.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
+                            await ch_msg.edit(embed=emb2)
+                except Exception as e:
+                    logger.warning("Mise à jour inscrit channel privé : %s", e)
+            break
+
 
 class RaceRegistrationView(discord.ui.View):
     def __init__(self, race_title: str, role_id: int):
@@ -219,7 +286,7 @@ class Calendar(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         # Restaurer les boutons d'inscription simples
-        for msg_id, data in self._load_messages().items():
+        for msg_id, data in _load_msgs().items():
             view = RaceRegistrationView(data["title"], data["role_id"])
             self.bot.add_view(view, message_id=int(msg_id))
 
@@ -246,14 +313,10 @@ class Calendar(commands.Cog):
     # ── Message mapping ───────────────────────────────────────────
 
     def _load_messages(self) -> dict:
-        try:
-            with open(DATA_MESSAGES) as f:
-                return json.load(f)
-        except FileNotFoundError:
-            return {}
+        return _load_msgs()
 
     def _save_message(self, message_id: str, data: dict):
-        messages = self._load_messages()
+        messages = _load_msgs()
         messages[message_id] = data
         with open(DATA_MESSAGES, "w") as f:
             json.dump(messages, f)
@@ -276,12 +339,16 @@ class Calendar(commands.Cog):
 
             races = []
             for event in data:
-                # cars est un JSON string dans l'API
+                # cars peut être un JSON string ou une liste directe
                 try:
                     cars_raw = json.loads(event.get("cars") or "[]")
                 except (json.JSONDecodeError, TypeError):
+                    cars_raw = event.get("cars") or []
+                if not isinstance(cars_raw, list):
                     cars_raw = []
+                # Gérer le cas où chaque élément est un dict {"name": "LMGT3", ...}
                 classes = [_clean_class_name(c) for c in cars_raw if c]
+                classes = [c for c in classes if c]  # Retirer les chaînes vides
 
                 image = event.get("imageUrl") or ""
                 if image and not image.startswith("http"):
@@ -342,7 +409,27 @@ class Calendar(commands.Cog):
 
         # Annonce dans le channel principal
         view = RaceRegistrationView(race["title"], role.id)
-        msg = await channel.send(embed=self._build_embed(race, race_channel), view=view)
+        msg = await channel.send(embed=self._build_embed(race, race_channel, inscrit_count=0), view=view)
+
+        # Ping de notification course
+        notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
+        if notify_role:
+            await channel.send(notify_role.mention)
+
+        # Ping des classes présentes dans la course
+        mentions = []
+        for class_name in race.get("classes", []):
+            role_name = CLASS_ROLE_MAP.get(class_name.lower(), class_name.lower())
+            class_role = discord.utils.find(
+                lambda r, rn=role_name: r.name.lower() == rn, guild.roles
+            )
+            if class_role:
+                mentions.append(class_role.mention)
+        if mentions:
+            await channel.send(" ".join(mentions))
+
+        # Premier message du channel privé : infos de la course (sans bouton d'inscription)
+        race_ch_msg = await race_channel.send(embed=self._build_embed(race, inscrit_count=0))
 
         self._save_message(str(msg.id), {
             "role_id": role.id,
@@ -352,10 +439,8 @@ class Calendar(commands.Cog):
             "server_name": race.get("server_name", ""),
             "password": race.get("password", ""),
             "notified_1h": False,
+            "channel_embed_msg_id": str(race_ch_msg.id),
         })
-
-        # Premier message du channel privé : infos de la course (sans bouton d'inscription)
-        await race_channel.send(embed=self._build_embed(race))
 
         # Sélection de classe dans le channel privé (si multiclasse)
         classes = race.get("classes", [])
@@ -426,7 +511,7 @@ class Calendar(commands.Cog):
     async def check_race_reminders(self):
         """Envoie les infos serveur/MDP dans le channel privé 1h avant chaque course."""
         now = datetime.now(PARIS)
-        messages = self._load_messages()
+        messages = _load_msgs()
         updated = False
 
         # Charger les données API une seule fois pour enrichir les entrées manquantes
@@ -626,7 +711,7 @@ class Calendar(commands.Cog):
         races_api = await self._fetch_races_api()
         api_by_date = {r["id"]: r for r in races_api}
 
-        messages = self._load_messages()
+        messages = _load_msgs()
         sent = 0
         skipped = 0
 
@@ -671,9 +756,52 @@ class Calendar(commands.Cog):
             ephemeral=True,
         )
 
+    @discord.app_commands.command(
+        name="courserestaurer",
+        description="Reposte les messages de sélection de classe manquants dans les channels de course",
+    )
+    async def course_restaurer(self, interaction: discord.Interaction):
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message(
+                "Commande réservée aux administrateurs.", ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        messages = _load_msgs()
+        regs = _load_registrations()
+        races_api = await self._fetch_races_api()
+        api_by_date = {r["id"]: r for r in races_api}
+        count = 0
+
+        for msg_id, data in messages.items():
+            if not data.get("channel_id"):
+                continue
+            channel_id = str(data["channel_id"])
+            if channel_id in regs:
+                continue  # Déjà un message de sélection de classe
+
+            date_key = data.get("date", "")
+            race = api_by_date.get(date_key)
+            if not race or not race.get("classes") or len(race["classes"]) < 2:
+                continue
+
+            try:
+                ch = await self.bot.fetch_channel(int(data["channel_id"]))
+                await self._post_class_selection(ch, race, race["classes"])
+                count += 1
+                logger.info("courserestaurer — sélection restaurée pour '%s'", data.get("title"))
+            except Exception as e:
+                logger.error("courserestaurer — erreur '%s' : %s", data.get("title"), e)
+
+        await interaction.followup.send(
+            f"✅ {count} message(s) de sélection de classe restauré(s).",
+            ephemeral=True,
+        )
+
     # ── Embed annonce principale ──────────────────────────────────
 
-    def _build_embed(self, race: dict, race_channel=None) -> discord.Embed:
+    def _build_embed(self, race: dict, race_channel=None, inscrit_count: int | None = None) -> discord.Embed:
         dt = datetime.fromisoformat(race["date"].replace("Z", "+00:00")).astimezone(PARIS)
         date_str = dt.strftime("%A %d %B %Y à %H:%M").capitalize()
         description = race.get("description") or ""
@@ -697,6 +825,8 @@ class Calendar(commands.Cog):
                 value=" · ".join(race["classes"]),
                 inline=False,
             )
+        if inscrit_count is not None:
+            embed.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
         if race_channel:
             embed.add_field(name="💬 Salon", value=race_channel.mention, inline=False)
         if race.get("image"):
