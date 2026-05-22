@@ -519,11 +519,11 @@ class Calendar(commands.Cog):
     async def before_check(self):
         await self.bot.wait_until_ready()
 
-    # ── Rappel 1h avant la course ─────────────────────────────────
+    # ── Rappel 5 min avant la course ─────────────────────────────
 
     @tasks.loop(minutes=1)
     async def check_race_reminders(self):
-        """Envoie les infos serveur/MDP dans le channel privé 1h avant chaque course."""
+        """Purge le channel privé et envoie les infos serveur/MDP 5 min avant chaque course."""
         now = datetime.now(PARIS)
         messages = _load_msgs()
         updated = False
@@ -559,33 +559,43 @@ class Calendar(commands.Cog):
                 continue
 
             delta = race_dt - now
-            # Fenêtre : entre 55 et 65 minutes avant le départ
-            if not (timedelta(minutes=55) <= delta <= timedelta(minutes=65)):
+            # Fenêtre : entre 4 et 6 minutes avant le départ
+            if not (timedelta(minutes=4) <= delta <= timedelta(minutes=6)):
                 continue
 
             try:
                 channel = await self.bot.fetch_channel(int(data["channel_id"]))
             except Exception as e:
-                logger.warning("Rappel 1h — channel introuvable (%s) : %s", data["channel_id"], e)
+                logger.warning("Rappel 5min — channel introuvable (%s) : %s", data["channel_id"], e)
                 data["notified_1h"] = True   # éviter de réessayer indéfiniment
                 updated = True
                 continue
 
+            # Purger les messages non-bot pour ne garder que les messages du bot
+            try:
+                def is_not_bot(m: discord.Message) -> bool:
+                    return m.author.id != self.bot.user.id
+
+                deleted = await channel.purge(limit=200, check=is_not_bot)
+                logger.info("Purge avant course '%s' : %d message(s) supprimé(s)", data["title"], len(deleted))
+            except Exception as e:
+                logger.warning("Purge channel %s impossible : %s", data["channel_id"], e)
+
             embed = discord.Embed(
-                title=f"🚦 Départ dans 1 heure — {data['title']}",
+                title=f"🚦 Départ dans 5 minutes — {data['title']}",
                 color=0xE63946,
             )
             if data.get("server_name"):
                 embed.add_field(name="🖥️ Nom du serveur", value=data["server_name"], inline=False)
             if data.get("password"):
                 embed.add_field(name="🔒 Mot de passe", value=data["password"], inline=False)
-            embed.set_footer(text="Par amour du spin")
+            embed.set_footer(text="Par amour du spin · Bonne course ! 🏎️")
 
             try:
                 await channel.send(embed=embed)
-                logger.info("Rappel 1h envoyé pour '%s'", data["title"])
+                logger.info("Rappel 5min envoyé pour '%s'", data["title"])
             except Exception as e:
-                logger.error("Rappel 1h — impossible d'envoyer dans %s : %s", data["channel_id"], e)
+                logger.error("Rappel 5min — impossible d'envoyer dans %s : %s", data["channel_id"], e)
 
             data["notified_1h"] = True
             updated = True
@@ -746,15 +756,24 @@ class Calendar(commands.Cog):
 
             try:
                 channel = await self.bot.fetch_channel(int(data["channel_id"]))
+                # Purger les messages non-bot
+                try:
+                    deleted = await channel.purge(
+                        limit=200,
+                        check=lambda m: m.author.id != self.bot.user.id,
+                    )
+                    logger.info("coursemdp purge '%s' : %d message(s)", data.get("title"), len(deleted))
+                except Exception as pe:
+                    logger.warning("coursemdp — purge impossible : %s", pe)
                 embed = discord.Embed(
-                    title=f"🚦 Infos serveur — {data['title']}",
+                    title=f"🚦 Départ imminent — {data['title']}",
                     color=0xE63946,
                 )
                 if data.get("server_name"):
                     embed.add_field(name="🖥️ Nom du serveur", value=data["server_name"], inline=False)
                 if data.get("password"):
                     embed.add_field(name="🔒 Mot de passe", value=data["password"], inline=False)
-                embed.set_footer(text="Par amour du spin")
+                embed.set_footer(text="Par amour du spin · Bonne course ! 🏎️")
                 await channel.send(embed=embed)
                 data["notified_1h"] = True
                 sent += 1
