@@ -15,7 +15,7 @@ SITE_URL = os.getenv("RACES_SITE_URL", "https://paramourduspin.fun")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
 RACES_CATEGORY_ID = int(os.getenv("RACES_CATEGORY_ID", "1399427481945247817"))
 RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
-RACES_NOTIFY_ROLE_ID = int(os.getenv("RACES_NOTIFY_ROLE_ID", "1394426437661888583"))
+RACES_NOTIFY_ROLE_ID = int(os.getenv("RACES_NOTIFY_ROLE_ID", "1505321380420255784"))
 DATA_FILE = "data/known_races.json"
 DATA_MESSAGES = "data/race_messages.json"
 DATA_REGISTRATIONS = "data/race_registrations.json"
@@ -423,22 +423,10 @@ class Calendar(commands.Cog):
         view = RaceRegistrationView(race["title"], role.id)
         msg = await channel.send(embed=self._build_embed(race, race_channel, inscrit_count=0), view=view)
 
-        # Ping de notification course
+        # Ping @Pilote uniquement
         notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
         if notify_role:
             await channel.send(notify_role.mention)
-
-        # Ping des classes présentes dans la course
-        mentions = []
-        for class_name in race.get("classes", []):
-            role_name = CLASS_ROLE_MAP.get(class_name.lower(), class_name.lower())
-            class_role = discord.utils.find(
-                lambda r, rn=role_name: r.name.lower() == rn, guild.roles
-            )
-            if class_role:
-                mentions.append(class_role.mention)
-        if mentions:
-            await channel.send(" ".join(mentions))
 
         # Premier message du channel privé : infos de la course (sans bouton d'inscription)
         race_ch_msg = await race_channel.send(embed=self._build_embed(race, inscrit_count=0))
