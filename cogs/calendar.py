@@ -106,7 +106,19 @@ def _build_class_embed(title: str, classes_data: dict, classes_max: dict | None 
         max_p = (classes_max or {}).get(class_name)
         count_str = f"{count}/{max_p}" if max_p else str(count)
         if members:
-            value = "\n".join(f"• {m['name']}" for m in members)
+            lines = [f"• {m['name']}" for m in members]
+            value = "\n".join(lines)
+            if len(value) > 1000:
+                # Tronquer et indiquer combien de noms supplémentaires
+                shown = []
+                for line in lines:
+                    candidate = "\n".join(shown + [line])
+                    if len(candidate) > 960:
+                        remaining = len(lines) - len(shown)
+                        shown.append(f"*… et {remaining} autre(s)*")
+                        break
+                    shown.append(line)
+                value = "\n".join(shown)
         else:
             value = "*Aucun inscrit*"
         embed.add_field(
