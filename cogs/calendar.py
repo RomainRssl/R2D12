@@ -90,10 +90,21 @@ def _load_msgs() -> dict:
         return {}
 
 
-def _build_class_embed(title: str, classes_data: dict, classes_max: dict | None = None) -> discord.Embed:
-    """Construit l'embed de sélection de classe style Apollo."""
+_CLASS_COLORS: dict[str, int] = {
+    "lmgt3":    0x57F287,  # vert
+    "hypercar": 0xED4245,  # rouge
+    "lmp2":     0x5865F2,  # bleu
+    "lmp3":     0x99AAB5,  # gris
+    "gte":      0xFEE75C,  # jaune
+}
+
+
+def _build_class_embeds(title: str, classes_data: dict, classes_max: dict | None = None) -> list[discord.Embed]:
+    """Retourne une liste d'embeds : un header + un embed par classe (description = liste complète)."""
     total = sum(len(v) for v in classes_data.values())
-    embed = discord.Embed(
+
+    # Embed d'en-tête avec les instructions
+    header = discord.Embed(
         title=f"🏁 {title}",
         description=(
             "Choisissez votre classe en cliquant sur le bouton correspondant.\n"
@@ -101,33 +112,24 @@ def _build_class_embed(title: str, classes_data: dict, classes_max: dict | None 
         ),
         color=0xE63946,
     )
+    header.set_footer(text=f"Par amour du spin · {total} pilote(s) inscrit(s)")
+    embeds = [header]
+
+    # Un embed par classe
     for class_name, members in classes_data.items():
         count = len(members)
         max_p = (classes_max or {}).get(class_name)
         count_str = f"{count}/{max_p}" if max_p else str(count)
-        if members:
-            lines = [f"• {m['name']}" for m in members]
-            value = "\n".join(lines)
-            if len(value) > 1000:
-                # Tronquer et indiquer combien de noms supplémentaires
-                shown = []
-                for line in lines:
-                    candidate = "\n".join(shown + [line])
-                    if len(candidate) > 960:
-                        remaining = len(lines) - len(shown)
-                        shown.append(f"*… et {remaining} autre(s)*")
-                        break
-                    shown.append(line)
-                value = "\n".join(shown)
-        else:
-            value = "*Aucun inscrit*"
-        embed.add_field(
-            name=f"🏎️ {class_name} ({count_str})",
-            value=value,
-            inline=True,
+        description = "\n".join(f"• {m['name']}" for m in members) if members else "*Aucun inscrit*"
+        color = _CLASS_COLORS.get(class_name.lower().replace(" ", ""), 0xE63946)
+        embed = discord.Embed(
+            title=f"🏎️ {class_name} — {count_str} pilote(s)",
+            description=description,
+            color=color,
         )
-    embed.set_footer(text=f"Par amour du spin · {total} pilote(s) inscrit(s)")
-    return embed
+        embeds.append(embed)
+
+    return embeds
 
 
 # ── Bouton classe ─────────────────────────────────────────────────
@@ -188,7 +190,7 @@ class ClassButton(discord.ui.Button):
             if channel and data.get("message_id"):
                 msg = await channel.fetch_message(int(data["message_id"]))
                 await msg.edit(
-                    embed=_build_class_embed(data["title"], data["classes"], data.get("classes_max"))
+                    embeds=_build_class_embeds(data["title"], data["classes"], data.get("classes_max"))
                 )
         except Exception as e:
             logger.warning("Impossible de mettre à jour le message de classe : %s", e)
@@ -471,7 +473,7 @@ class Calendar(commands.Cog):
         classes_max = race.get("classes_max", {})
         view = ClassRegistrationView(classes, channel.id)
         msg = await channel.send(
-            embed=_build_class_embed(race["title"], classes_data, classes_max),
+            embeds=_build_class_embeds(race["title"], classes_data, classes_max),
             view=view,
         )
         regs = _load_registrations()
