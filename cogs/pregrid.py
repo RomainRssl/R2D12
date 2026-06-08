@@ -219,7 +219,7 @@ class Pregrid(commands.Cog):
         try:
             client = anthropic.AsyncAnthropic()
             message = await client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5",
                 max_tokens=400,
                 system=(
                     "Tu es le commentateur officiel de la ligue SimRacing PADS (Par amour du spin). "
