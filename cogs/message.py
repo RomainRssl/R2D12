@@ -15,13 +15,15 @@ class Message(commands.Cog):
         contenu="Texte du message à envoyer",
         channel="Channel cible (défaut : channel actuel)",
     )
-    @app_commands.default_permissions(manage_guild=True)
     async def message(
         self,
         interaction: discord.Interaction,
         contenu: str,
         channel: discord.TextChannel | None = None,
     ):
+        if not interaction.user.guild_permissions.manage_guild and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Commande réservée au staff.", ephemeral=True)
+            return
         target = channel or interaction.channel
         await target.send(contenu)
         mention = target.mention if channel else "ce channel"
