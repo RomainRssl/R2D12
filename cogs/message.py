@@ -1,11 +1,19 @@
+import os
 import discord
 from discord import app_commands
 from discord.ext import commands
+
+RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
 
 
 class Message(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    def _is_staff(self, user: discord.Member) -> bool:
+        return user.guild_permissions.manage_guild or user.guild_permissions.administrator or any(
+            r.id == RACES_STAFF_ROLE_ID for r in user.roles
+        )
 
     @app_commands.command(
         name="message",
@@ -21,7 +29,7 @@ class Message(commands.Cog):
         contenu: str,
         channel: discord.TextChannel | None = None,
     ):
-        if not interaction.user.guild_permissions.manage_guild and not interaction.user.guild_permissions.administrator:
+        if not self._is_staff(interaction.user):
             await interaction.response.send_message("❌ Commande réservée au staff.", ephemeral=True)
             return
         target = channel or interaction.channel
