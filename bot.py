@@ -45,6 +45,7 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.credits_admin")
         await self.load_extension("cogs.pregrid")
         await self.load_extension("cogs.splits")
+        await self.load_extension("cogs.message")
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
