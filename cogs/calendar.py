@@ -34,6 +34,67 @@ CLASS_ROLE_MAP: dict[str, str] = {
     "gte":      "gte",
 }
 
+# Jours et mois en français (indépendant de la locale système)
+FR_DAYS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+FR_MONTHS = [
+    "janvier", "février", "mars", "avril", "mai", "juin",
+    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+]
+
+
+def _format_date_fr(dt: datetime) -> str:
+    """Ex : « Samedi 12 juillet 2026 à 21:00 »."""
+    day = FR_DAYS[dt.weekday()].capitalize()
+    return f"{day} {dt.day} {FR_MONTHS[dt.month - 1]} {dt.year} à {dt:%H:%M}"
+
+
+# Briefing d'avant-course posté automatiquement dans le channel de la course
+BRIEFING_TEXT = """\
+Avant de prendre la piste, petit rappel des règles d'or. On est là pour le plaisir, dans le respect de chacun. 🏁
+
+🚦 **Départ & premier tour**
+
+La course ne se gagne pas au premier virage, mais elle peut s'y perdre. Freinages anticipés, laissez de l'espace et gardez une marge de sécurité. Un bon départ est un départ où tout le monde passe le premier tour sans dégâts.
+
+⚔️ **Dépassements**
+
+Un dépassement propre se fait à deux. Une situation de dépassement est considérée comme engagée lorsque la roue avant de l'attaquant atteint au minimum le niveau de la roue arrière du défenseur avant le point de corde. À partir de ce moment, les deux pilotes doivent se laisser l'espace nécessaire. Pas de divebomb, un seul changement de trajectoire en défense.
+
+🔵 **Trafic multiclasse & drapeaux bleus**
+
+Voiture rapide : c'est à vous de réaliser le dépassement proprement. Voiture doublée : restez prévisible, gardez votre trajectoire et évitez tout changement brutal de ligne.
+
+💥 **En cas de contact**
+
+Si vous provoquez un contact qui fait perdre une ou plusieurs positions à un concurrent, attendez-le et rendez la position lorsque cela peut être fait en sécurité. Un simple « désolé » en vocal ne coûte rien et apaise souvent les tensions.
+
+🔄 **Retour en piste**
+
+Après un tête-à-queue ou une sortie : vérifiez toujours le trafic avant de revenir en piste. Reprenez la piste parallèlement au sens de circulation, jamais en travers.
+
+Si votre voiture est endommagée, adaptez votre rythme jusqu'aux stands et restez particulièrement vigilant vis-à-vis des autres concurrents.
+
+🎙️ **Comportement**
+
+Pas de rage en vocal ou dans le chat pendant la course. Gardez votre calme même en cas d'incident. Les situations litigieuses seront analysées après la course selon les procédures prévues.
+
+⚖️ **Commission de course & réclamations**
+
+Les contacts simples sont analysés directement par la commission de course.
+
+Si vous estimez avoir été victime d'un comportement non fair-play ou qu'un incident nécessite un examen particulier, utilisez le système de ticket après la course. Les commissaires se chargeront d'analyser la situation.
+
+Pas de règlement de compte en piste, pas de débat à chaud en vocal : la commission est là pour ça.
+
+🏁 **Bonne course à tous !**
+
+À la FIS, la victoire est belle, mais le respect de ses concurrents l'est encore plus. 🏆
+
+Je serais là à 20h50 pour répondre aux questions pré course.
+
+À tout à l'heure !"""
+
+
 # Mapping classe → (ButtonStyle, emoji)
 # Discord n'a que 4 couleurs : success=vert, danger=rouge, primary=bleu, secondary=gris
 CLASS_STYLES: dict = {
@@ -207,10 +268,143 @@ class ClassRegistrationView(discord.ui.View):
 
 # ── Bouton inscription simple ─────────────────────────────────────
 
+async def _refresh_inscrit_counts(guild: discord.Guild, role_id: int):
+    """Met à jour le compteur d'inscrits sur l'annonce principale et l'embed du channel privé."""
+    role = guild.get_role(role_id)
+    if not role:
+        return
+    inscrit_count = len(role.members)
+    msgs = _load_msgs()
+    for msg_id_str, data in msgs.items():
+        if data.get("role_id") != role_id:
+            continue
+
+        # Mise à jour dans le channel principal
+        try:
+            main_ch = guild.get_channel(RACES_CHANNEL_ID)
+            if main_ch:
+                main_msg = await main_ch.fetch_message(int(msg_id_str))
+                if main_msg.embeds:
+                    emb = main_msg.embeds[0].copy()
+                    updated = False
+                    for i, field in enumerate(emb.fields):
+                        if "Inscrits" in field.name:
+                            emb.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
+                            updated = True
+                            break
+                    if not updated:
+                        emb.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
+                    view = RaceRegistrationView(data["title"], role_id)
+                    await main_msg.edit(embed=emb, view=view)
+        except Exception as e:
+            logger.warning("Mise à jour inscrit channel principal : %s", e)
+
+        # Mise à jour dans le channel privé de la course
+        if data.get("channel_embed_msg_id") and data.get("channel_id"):
+            try:
+                race_ch = guild.get_channel(int(data["channel_id"]))
+                if race_ch:
+                    ch_msg = await race_ch.fetch_message(int(data["channel_embed_msg_id"]))
+                    if ch_msg.embeds:
+                        emb2 = ch_msg.embeds[0].copy()
+                        updated2 = False
+                        for i, field in enumerate(emb2.fields):
+                            if "Inscrits" in field.name:
+                                emb2.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
+                                updated2 = True
+                                break
+                        if not updated2:
+                            emb2.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
+                        await ch_msg.edit(embed=emb2)
+            except Exception as e:
+                logger.warning("Mise à jour inscrit channel privé : %s", e)
+        break
+
+
+async def _remove_user_from_classes(guild: discord.Guild, role_id: int, uid: str) -> list[str]:
+    """Retire l'utilisateur de toutes les classes de la course liée à ce rôle.
+
+    Met à jour le message de sélection de classe et retourne les classes quittées."""
+    msgs = _load_msgs()
+    race_entry = next((d for d in msgs.values() if d.get("role_id") == role_id), None)
+    if not race_entry or not race_entry.get("channel_id"):
+        return []
+
+    key = str(race_entry["channel_id"])
+    regs = _load_registrations()
+    data = regs.get(key)
+    if not data:
+        return []
+
+    removed = []
+    for cls, members in data.get("classes", {}).items():
+        if any(m["id"] == uid for m in members):
+            removed.append(cls)
+            data["classes"][cls] = [m for m in members if m["id"] != uid]
+    if not removed:
+        return []
+
+    _save_registrations(regs)
+
+    try:
+        channel = guild.get_channel(int(key))
+        if channel and data.get("message_id"):
+            msg = await channel.fetch_message(int(data["message_id"]))
+            await msg.edit(
+                embeds=_build_class_embeds(data["title"], data["classes"], data.get("classes_max"))
+            )
+    except Exception as e:
+        logger.warning("Impossible de mettre à jour le message de classe : %s", e)
+
+    return removed
+
+
+class UnregisterButton(discord.ui.Button):
+    def __init__(self, role_id: int):
+        super().__init__(
+            label="Se désinscrire",
+            style=discord.ButtonStyle.danger,
+            emoji="🚪",
+            custom_id=f"race_unregister_{role_id}",
+        )
+        self.role_id = role_id
+
+    async def callback(self, interaction: discord.Interaction):
+        role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("Rôle introuvable.", ephemeral=True)
+            return
+        if role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "Vous n'êtes pas inscrit à cette course.", ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        await interaction.user.remove_roles(role)
+
+        # Retirer aussi l'inscription de classe dans le channel de la course
+        removed_classes = await _remove_user_from_classes(
+            interaction.guild, self.role_id, str(interaction.user.id)
+        )
+        await _refresh_inscrit_counts(interaction.guild, self.role_id)
+
+        text = f"❌ Vous êtes désinscrit de **{role.name}**."
+        if removed_classes:
+            text += " Votre inscription en **" + "**, **".join(removed_classes) + "** a été retirée."
+        await interaction.followup.send(text, ephemeral=True)
+
+
+class UnregisterView(discord.ui.View):
+    def __init__(self, role_id: int):
+        super().__init__(timeout=None)
+        self.add_item(UnregisterButton(role_id))
+
+
 class RaceButton(discord.ui.Button):
     def __init__(self, race_title: str, role_id: int):
         super().__init__(
-            label=f"Inscription {race_title}",
+            label=f"S'inscrire — {race_title}"[:80],
             style=discord.ButtonStyle.primary,
             custom_id=f"race_register_{role_id}",
         )
@@ -221,64 +415,24 @@ class RaceButton(discord.ui.Button):
         if not role:
             await interaction.response.send_message("Rôle introuvable.", ephemeral=True)
             return
+
         if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
+            # Déjà inscrit : proposer le bouton personnel « Se désinscrire »
             await interaction.response.send_message(
-                f"❌ Désinscrit de **{role.name}**.", ephemeral=True
+                f"Vous êtes déjà inscrit pour **{role.name}**.",
+                view=UnregisterView(self.role_id),
+                ephemeral=True,
             )
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(
-                f"✅ Inscrit pour **{role.name}** !", ephemeral=True
-            )
+            return
 
-        # Mettre à jour le compteur d'inscrits sur les deux messages
-        inscrit_count = len(role.members)
-        msgs = _load_msgs()
-        for msg_id_str, data in msgs.items():
-            if data.get("role_id") != self.role_id:
-                continue
-
-            # Mise à jour dans le channel principal
-            try:
-                main_ch = interaction.guild.get_channel(RACES_CHANNEL_ID)
-                if main_ch:
-                    main_msg = await main_ch.fetch_message(int(msg_id_str))
-                    if main_msg.embeds:
-                        emb = main_msg.embeds[0].copy()
-                        updated = False
-                        for i, field in enumerate(emb.fields):
-                            if "Inscrits" in field.name:
-                                emb.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
-                                updated = True
-                                break
-                        if not updated:
-                            emb.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
-                        view = RaceRegistrationView(data["title"], self.role_id)
-                        await main_msg.edit(embed=emb, view=view)
-            except Exception as e:
-                logger.warning("Mise à jour inscrit channel principal : %s", e)
-
-            # Mise à jour dans le channel privé de la course
-            if data.get("channel_embed_msg_id") and data.get("channel_id"):
-                try:
-                    race_ch = interaction.guild.get_channel(int(data["channel_id"]))
-                    if race_ch:
-                        ch_msg = await race_ch.fetch_message(int(data["channel_embed_msg_id"]))
-                        if ch_msg.embeds:
-                            emb2 = ch_msg.embeds[0].copy()
-                            updated2 = False
-                            for i, field in enumerate(emb2.fields):
-                                if "Inscrits" in field.name:
-                                    emb2.set_field_at(i, name=field.name, value=str(inscrit_count), inline=field.inline)
-                                    updated2 = True
-                                    break
-                            if not updated2:
-                                emb2.add_field(name="👥 Inscrits", value=str(inscrit_count), inline=True)
-                            await ch_msg.edit(embed=emb2)
-                except Exception as e:
-                    logger.warning("Mise à jour inscrit channel privé : %s", e)
-            break
+        await interaction.response.defer(ephemeral=True)
+        await interaction.user.add_roles(role)
+        await _refresh_inscrit_counts(interaction.guild, self.role_id)
+        await interaction.followup.send(
+            f"✅ Inscrit pour **{role.name}** !",
+            view=UnregisterView(self.role_id),
+            ephemeral=True,
+        )
 
 
 class RaceRegistrationView(discord.ui.View):
@@ -305,6 +459,8 @@ class Calendar(commands.Cog):
         for msg_id, data in _load_msgs().items():
             view = RaceRegistrationView(data["title"], data["role_id"])
             self.bot.add_view(view, message_id=int(msg_id))
+            # Bouton « Se désinscrire » envoyé en éphémère (custom_id global)
+            self.bot.add_view(UnregisterView(data["role_id"]))
 
         # Restaurer les vues de sélection de classe
         for key, data in _load_registrations().items():
@@ -416,9 +572,13 @@ class Calendar(commands.Cog):
         role = await guild.create_role(name=race["title"], mentionable=True)
 
         category = guild.get_channel(RACES_CATEGORY_ID)
+        # Les inscrits peuvent lire mais seul le staff peut écrire dans le channel de course
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
             role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True
+            ),
+            guild.me: discord.PermissionOverwrite(
                 view_channel=True, send_messages=True, read_message_history=True
             ),
         }
@@ -435,6 +595,7 @@ class Calendar(commands.Cog):
 
         # Annonce dans le channel principal
         view = RaceRegistrationView(race["title"], role.id)
+        self.bot.add_view(UnregisterView(role.id))
         msg = await channel.send(embed=self._build_embed(race, race_channel, inscrit_count=0), view=view)
 
         # Ping @Pilote uniquement
@@ -460,6 +621,23 @@ class Calendar(commands.Cog):
         classes = race.get("classes", [])
         if len(classes) >= 2:
             await self._post_class_selection(race_channel, race, classes)
+
+        # Briefing d'avant-course
+        try:
+            await self._post_briefing(race_channel)
+        except Exception as e:
+            logger.error("Impossible de poster le briefing dans %s : %s", race_channel.id, e)
+
+    async def _post_briefing(self, channel: discord.TextChannel):
+        """Poste le briefing d'avant-course dans le channel privé de la course."""
+        notify_role = channel.guild.get_role(RACES_NOTIFY_ROLE_ID)
+        mention = notify_role.mention if notify_role else "@pilote"
+        embed = discord.Embed(description=BRIEFING_TEXT, color=0xE63946)
+        embed.set_footer(text="Par amour du spin")
+        await channel.send(
+            content=f"📋 **BRIEFING D'AVANT-COURSE** {mention}",
+            embed=embed,
+        )
 
     async def _post_class_selection(
         self,
@@ -838,7 +1016,7 @@ class Calendar(commands.Cog):
 
     def _build_embed(self, race: dict, race_channel=None, inscrit_count: int | None = None) -> discord.Embed:
         dt = datetime.fromisoformat(race["date"].replace("Z", "+00:00")).astimezone(PARIS)
-        date_str = dt.strftime("%A %d %B %Y à %H:%M").capitalize()
+        date_str = _format_date_fr(dt)
         description = race.get("description") or ""
         # Discord limite les descriptions d'embed à 4096 caractères
         if len(description) > 4096:
