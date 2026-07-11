@@ -151,6 +151,19 @@ def _load_msgs() -> dict:
         return {}
 
 
+def _find_api_race(api_races: list, data: dict) -> dict | None:
+    """Retrouve la course API correspondant à une entrée sauvegardée.
+
+    Correspondance par date, départagée par le titre si plusieurs courses
+    partagent le même horaire."""
+    candidates = [r for r in api_races if r["date"] == data.get("date")]
+    if len(candidates) > 1:
+        by_title = next((r for r in candidates if r["title"] == data.get("title")), None)
+        if by_title:
+            return by_title
+    return candidates[0] if candidates else None
+
+
 _CLASS_COLORS: dict[str, int] = {
     "lmgt3":    0x57F287,  # vert
     "hypercar": 0xED4245,  # rouge
@@ -460,6 +473,28 @@ class Calendar(commands.Cog):
                 view = ClassRegistrationView(classes, int(key))
                 self.bot.add_view(view, message_id=int(data["message_id"]))
 
+    @commands.Cog.listener()
+    async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
+        """Nettoie les données d'une course quand son channel est supprimé à la main."""
+        ch_id = str(channel.id)
+
+        messages = _load_msgs()
+        stale = [k for k, d in messages.items() if str(d.get("channel_id", "")) == ch_id]
+        if stale:
+            for k in stale:
+                del messages[k]
+            with open(DATA_MESSAGES, "w") as f:
+                json.dump(messages, f, ensure_ascii=False, indent=2)
+
+        regs = _load_registrations()
+        had_regs = ch_id in regs
+        if had_regs:
+            del regs[ch_id]
+            _save_registrations(regs)
+
+        if stale or had_regs:
+            logger.info("Channel de course %s supprimé — données nettoyées", ch_id)
+
     # ── Known races ───────────────────────────────────────────────
 
     def _load_known(self) -> set | None:
@@ -531,7 +566,8 @@ class Calendar(commands.Cog):
                     desc = desc[:4093] + "…"
 
                 races.append({
-                    "id":          event["date"],        # datetime comme ID (continuité)
+                    # ID = date + titre : deux courses peuvent partager le même horaire
+                    "id":          f"{event['date']}|{event['title']}",
                     "title":       event["title"],
                     "date":        event["date"],
                     "simulator":   event.get("game", "") or "",
@@ -557,7 +593,9 @@ class Calendar(commands.Cog):
             channel = await self.bot.fetch_channel(RACES_CHANNEL_ID)
         except (discord.NotFound, discord.Forbidden) as e:
             logger.error("Impossible de trouver le channel %s : %s", RACES_CHANNEL_ID, e)
-            return
+            # Propager pour que la course ne soit pas marquée comme connue
+            # et que l'annonce soit retentée au prochain scan
+            raise
 
         guild = channel.guild
         role = await guild.create_role(name=race["title"], mentionable=True)
@@ -671,7 +709,8 @@ class Calendar(commands.Cog):
             self._save_known(current_ids)
             return
 
-        new_races = [r for r in races if r["id"] not in known]
+        # Rétrocompat : les anciens IDs étaient la date seule
+        new_races = [r for r in races if r["id"] not in known and r["date"] not in known]
         if not new_races:
             return
 
@@ -711,7 +750,7 @@ class Calendar(commands.Cog):
             if not data.get("server_name") and not data.get("password"):
                 if api_races is None:
                     api_races = await self._fetch_races_api()
-                match = next((r for r in api_races if r["id"] == data.get("date")), None)
+                match = _find_api_race(api_races, data)
                 if match:
                     data["server_name"] = match.get("server_name", "")
                     data["password"]    = match.get("password", "")
@@ -804,10 +843,10 @@ class Calendar(commands.Cog):
             if races:
                 lines.append(f"API accessible — {len(races)} course(s) trouvée(s)")
                 known = self._load_known() or set()
-                new = [r for r in races if r["id"] not in known]
+                new = [r for r in races if r["id"] not in known and r["date"] not in known]
                 lines.append(f"Courses connues : {len(known)} | Nouvelles : **{len(new)}**")
                 for r in races:
-                    status = "✅ connue" if r["id"] in known else "🆕 nouvelle"
+                    status = "✅ connue" if (r["id"] in known or r["date"] in known) else "🆕 nouvelle"
                     lines.append(f"  • **{r['title']}** — {status}")
                     lines.append(f"    🎮 {r.get('simulator') or '—'}  🏟️ {r.get('circuit') or '—'}")
                     classes_str = ", ".join(r["classes"]) if r["classes"] else "*aucune*"
@@ -831,16 +870,13 @@ class Calendar(commands.Cog):
                 "Commande réservée aux administrateurs.", ephemeral=True
             )
             return
-        if os.path.exists(DATA_FILE):
-            os.remove(DATA_FILE)
-            await interaction.response.send_message(
-                "Liste réinitialisée. Au prochain scan (≤5 min), toutes les courses actuelles seront annoncées.",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                "Aucun fichier de courses connues trouvé.", ephemeral=True
-            )
+        # Liste vide (et non fichier supprimé) : un fichier absent serait
+        # réinitialisé au prochain scan sans rien annoncer.
+        self._save_known(set())
+        await interaction.response.send_message(
+            "Liste réinitialisée. Au prochain scan (≤5 min), toutes les courses actuelles du site seront réannoncées.",
+            ephemeral=True,
+        )
 
     @discord.app_commands.command(
         name="courseforcer",
@@ -862,7 +898,7 @@ class Calendar(commands.Cog):
             return
 
         known = self._load_known() or set()
-        new_races = [r for r in races if r["id"] not in known]
+        new_races = [r for r in races if r["id"] not in known and r["date"] not in known]
 
         if not new_races:
             await interaction.followup.send("Aucune nouvelle course à annoncer.", ephemeral=True)
@@ -893,7 +929,6 @@ class Calendar(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         races_api = await self._fetch_races_api()
-        api_by_date = {r["id"]: r for r in races_api}
 
         messages = _load_msgs()
         sent = 0
@@ -904,11 +939,11 @@ class Calendar(commands.Cog):
                 continue
 
             # Enrichir depuis l'API si besoin
-            date_key = data.get("date", "")
-            if (not data.get("server_name") and not data.get("password")) and date_key in api_by_date:
-                api_r = api_by_date[date_key]
-                data["server_name"] = api_r.get("server_name", "")
-                data["password"]    = api_r.get("password", "")
+            if not data.get("server_name") and not data.get("password"):
+                api_r = _find_api_race(races_api, data)
+                if api_r:
+                    data["server_name"] = api_r.get("server_name", "")
+                    data["password"]    = api_r.get("password", "")
 
             if not data.get("server_name") and not data.get("password"):
                 skipped += 1
@@ -955,7 +990,6 @@ class Calendar(commands.Cog):
         messages = _load_msgs()
         regs = _load_registrations()
         races_api = await self._fetch_races_api()
-        api_by_date = {r["id"]: r for r in races_api}
         count = 0
 
         for msg_id, data in messages.items():
@@ -965,8 +999,7 @@ class Calendar(commands.Cog):
             if channel_id in regs:
                 continue  # Déjà un message de sélection de classe
 
-            date_key = data.get("date", "")
-            race = api_by_date.get(date_key)
+            race = _find_api_race(races_api, data)
             if not race or not race.get("classes") or len(race["classes"]) < 2:
                 continue
 
