@@ -359,6 +359,38 @@ async def _remove_user_from_classes(guild: discord.Guild, role_id: int, uid: str
     return removed
 
 
+class RaceButton(discord.ui.Button):
+    def __init__(self, race_title: str, role_id: int):
+        super().__init__(
+            label="S'inscrire",
+            style=discord.ButtonStyle.success,
+            emoji="✅",
+            custom_id=f"race_register_{role_id}",
+        )
+        self.role_id = role_id
+
+    async def callback(self, interaction: discord.Interaction):
+        role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("Rôle introuvable.", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.response.send_message(
+                f"Vous êtes déjà inscrit pour **{role.name}**. "
+                "Utilisez le bouton « Se désinscrire » pour annuler votre inscription.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        await interaction.user.add_roles(role)
+        await _refresh_inscrit_counts(interaction.guild, self.role_id)
+        await interaction.followup.send(
+            f"✅ Inscrit pour **{role.name}** !", ephemeral=True
+        )
+
+
 class UnregisterButton(discord.ui.Button):
     def __init__(self, role_id: int):
         super().__init__(
@@ -395,50 +427,11 @@ class UnregisterButton(discord.ui.Button):
         await interaction.followup.send(text, ephemeral=True)
 
 
-class UnregisterView(discord.ui.View):
-    def __init__(self, role_id: int):
-        super().__init__(timeout=None)
-        self.add_item(UnregisterButton(role_id))
-
-
-class RaceButton(discord.ui.Button):
-    def __init__(self, race_title: str, role_id: int):
-        super().__init__(
-            label=f"S'inscrire — {race_title}"[:80],
-            style=discord.ButtonStyle.primary,
-            custom_id=f"race_register_{role_id}",
-        )
-        self.role_id = role_id
-
-    async def callback(self, interaction: discord.Interaction):
-        role = interaction.guild.get_role(self.role_id)
-        if not role:
-            await interaction.response.send_message("Rôle introuvable.", ephemeral=True)
-            return
-
-        if role in interaction.user.roles:
-            # Déjà inscrit : proposer le bouton personnel « Se désinscrire »
-            await interaction.response.send_message(
-                f"Vous êtes déjà inscrit pour **{role.name}**.",
-                view=UnregisterView(self.role_id),
-                ephemeral=True,
-            )
-            return
-
-        await interaction.response.defer(ephemeral=True)
-        await interaction.user.add_roles(role)
-        await _refresh_inscrit_counts(interaction.guild, self.role_id)
-        await interaction.followup.send(
-            f"✅ Inscrit pour **{role.name}** !",
-            view=UnregisterView(self.role_id),
-            ephemeral=True,
-        )
-
-
 class RaceRegistrationView(discord.ui.View):
     def __init__(self, race_title: str, role_id: int):
         super().__init__(timeout=None)
         self.add_item(RaceButton(race_title, role_id))
+        self.add_item(UnregisterButton(role_id))
 
 
 # ── Cog principal ─────────────────────────────────────────────────
@@ -455,12 +448,10 @@ class Calendar(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # Restaurer les boutons d'inscription simples
+        # Restaurer les boutons d'inscription/désinscription
         for msg_id, data in _load_msgs().items():
             view = RaceRegistrationView(data["title"], data["role_id"])
             self.bot.add_view(view, message_id=int(msg_id))
-            # Bouton « Se désinscrire » envoyé en éphémère (custom_id global)
-            self.bot.add_view(UnregisterView(data["role_id"]))
 
         # Restaurer les vues de sélection de classe
         for key, data in _load_registrations().items():
@@ -595,7 +586,6 @@ class Calendar(commands.Cog):
 
         # Annonce dans le channel principal
         view = RaceRegistrationView(race["title"], role.id)
-        self.bot.add_view(UnregisterView(role.id))
         msg = await channel.send(embed=self._build_embed(race, race_channel, inscrit_count=0), view=view)
 
         # Ping @Pilote uniquement
@@ -703,7 +693,7 @@ class Calendar(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def check_race_reminders(self):
-        """Purge le channel privé et envoie les infos serveur/MDP 5 min avant chaque course."""
+        """Envoie les infos serveur/MDP dans le channel privé 5 min avant chaque course."""
         now = datetime.now(PARIS)
         messages = _load_msgs()
         updated = False
@@ -750,16 +740,6 @@ class Calendar(commands.Cog):
                 data["notified_1h"] = True   # éviter de réessayer indéfiniment
                 updated = True
                 continue
-
-            # Purger les messages non-bot pour ne garder que les messages du bot
-            try:
-                def is_not_bot(m: discord.Message) -> bool:
-                    return m.author.id != self.bot.user.id
-
-                deleted = await channel.purge(limit=200, check=is_not_bot)
-                logger.info("Purge avant course '%s' : %d message(s) supprimé(s)", data["title"], len(deleted))
-            except Exception as e:
-                logger.warning("Purge channel %s impossible : %s", data["channel_id"], e)
 
             embed = discord.Embed(
                 title=f"🚦 Départ dans 5 minutes — {data['title']}",
@@ -936,15 +916,6 @@ class Calendar(commands.Cog):
 
             try:
                 channel = await self.bot.fetch_channel(int(data["channel_id"]))
-                # Purger les messages non-bot
-                try:
-                    deleted = await channel.purge(
-                        limit=200,
-                        check=lambda m: m.author.id != self.bot.user.id,
-                    )
-                    logger.info("coursemdp purge '%s' : %d message(s)", data.get("title"), len(deleted))
-                except Exception as pe:
-                    logger.warning("coursemdp — purge impossible : %s", pe)
                 embed = discord.Embed(
                     title=f"🚦 Départ imminent — {data['title']}",
                     color=0xE63946,
