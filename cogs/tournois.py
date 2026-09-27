@@ -216,9 +216,15 @@ class Tournois(commands.Cog):
 
     def _build_calendrier_embed(self, champ: dict) -> discord.Embed:
         titre = champ["nom"] + (f" — {champ['theme']}" if champ.get("theme") else "")
+        nb_manches = len(champ["manches"])
+        nb_comptees = champ["nbCoursesComptees"]
+        description = f"🎯 {nb_comptees} course(s) comptée(s) sur {nb_manches} manche(s)."
+        nb_jokers = nb_manches - nb_comptees
+        if nb_jokers > 0:
+            description += f" → **{nb_jokers} joker{'s' if nb_jokers > 1 else ''}** par pilote."
         embed = discord.Embed(
             title=f"🏆 {titre} — Calendrier complet",
-            description=f"🎯 {champ['nbCoursesComptees']} course(s) comptée(s) sur {len(champ['manches'])} manche(s).",
+            description=description,
             color=EMBED_COLOR,
         )
         for manche in champ["manches"]:
