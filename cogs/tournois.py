@@ -106,8 +106,31 @@ def _reputation_ligne(champ: dict) -> str | None:
 # collision avec ses vues persistantes (S'inscrire/Se désinscrire des courses
 # "Autres").
 
+async def _fetch_reputation(discord_id: str) -> int | None:
+    """Réputation actuelle d'un pilote (0-200) d'après son ID Discord, ou None
+    si le pilote n'a pas de profil sur le site (jamais connecté)."""
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(
+                f"{SITE_URL}/api/players/by-discord",
+                params={"discordIds": discord_id},
+                headers={"x-bot-secret": BOT_API_SECRET},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r:
+                if r.status != 200:
+                    logger.error("API by-discord — statut %s", r.status)
+                    return None
+                data = await r.json()
+                if not data:
+                    return None
+                return data[0].get("reputation")
+    except Exception as e:
+        logger.error("Erreur API by-discord (réputation) : %s", e)
+        return None
+
+
 class TournoiButton(discord.ui.Button):
-    def __init__(self, role_id: int):
+    def __init__(self, role_id: int, reputation_min: int | None = None):
         super().__init__(
             label="S'inscrire",
             style=discord.ButtonStyle.success,
@@ -115,6 +138,7 @@ class TournoiButton(discord.ui.Button):
             custom_id=f"tournoi_register_{role_id}",
         )
         self.role_id = role_id
+        self.reputation_min = reputation_min
 
     async def callback(self, interaction: discord.Interaction):
         role = interaction.guild.get_role(self.role_id)
@@ -126,6 +150,28 @@ class TournoiButton(discord.ui.Button):
                 f"Vous êtes déjà inscrit pour **{role.name}**.", ephemeral=True
             )
             return
+
+        if self.reputation_min is not None:
+            await interaction.response.defer(ephemeral=True)
+            reputation = await _fetch_reputation(str(interaction.user.id))
+            if reputation is None:
+                await interaction.followup.send(
+                    "❌ Inscription refusée : votre profil n'a pas été trouvé sur le site "
+                    f"({SITE_URL}). Connectez-vous-y au moins une fois via Discord, puis réessayez.",
+                    ephemeral=True,
+                )
+                return
+            if reputation < self.reputation_min:
+                await interaction.followup.send(
+                    f"❌ Inscription refusée : ce tournoi requiert une réputation minimum de "
+                    f"**{self.reputation_min}/200**, la vôtre est de **{reputation}/200**.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.user.add_roles(role)
+            await interaction.followup.send(f"✅ Inscrit pour **{role.name}** !", ephemeral=True)
+            return
+
         await interaction.response.defer(ephemeral=True)
         await interaction.user.add_roles(role)
         await interaction.followup.send(f"✅ Inscrit pour **{role.name}** !", ephemeral=True)
@@ -155,9 +201,9 @@ class TournoiUnregisterButton(discord.ui.Button):
 
 
 class TournoiRegistrationView(discord.ui.View):
-    def __init__(self, role_id: int):
+    def __init__(self, role_id: int, reputation_min: int | None = None):
         super().__init__(timeout=None)
-        self.add_item(TournoiButton(role_id))
+        self.add_item(TournoiButton(role_id, reputation_min))
         self.add_item(TournoiUnregisterButton(role_id))
 
 
@@ -242,11 +288,11 @@ class Tournois(commands.Cog):
 
     # ── Annonce ──────────────────────────────────────────────────────────
 
-    async def _announce(self, embed: discord.Embed, role_name: str) -> None:
+    async def _announce(self, embed: discord.Embed, role_name: str, reputation_min: int | None = None) -> None:
         channel = await self.bot.fetch_channel(RACES_CHANNEL_ID)
         guild = channel.guild
         role = await guild.create_role(name=role_name[:100], mentionable=True)
-        view = TournoiRegistrationView(role.id)
+        view = TournoiRegistrationView(role.id, reputation_min)
         msg = await channel.send(embed=embed, view=view)
 
         notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
@@ -289,7 +335,7 @@ class Tournois(commands.Cog):
                 ):
                     try:
                         embed = self._build_calendrier_embed(champ)
-                        await self._announce(embed, champ["nom"])
+                        await self._announce(embed, champ["nom"], champ.get("reputationMin"))
                         entry["immediat_annonce"] = True
                         entry["manches_annoncees"] = [m["id"] for m in champ["manches"]]
                         changed = True
@@ -309,7 +355,7 @@ class Tournois(commands.Cog):
                 try:
                     embed = self._build_manche_embed(champ, manche)
                     role_name = f"{champ['nom']} — Manche {manche['ordre']}"
-                    await self._announce(embed, role_name)
+                    await self._announce(embed, role_name, champ.get("reputationMin"))
                     entry["manches_annoncees"].append(manche["id"])
                     changed = True
                 except Exception as e:
