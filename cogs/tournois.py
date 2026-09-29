@@ -379,6 +379,13 @@ class Tournois(commands.Cog):
         channel = await self.bot.fetch_channel(TOURNOIS_ANNONCE_CHANNEL_ID)
         await channel.send(embed=self._build_nouveau_embed(champ))
 
+        notify_role = channel.guild.get_role(RACES_NOTIFY_ROLE_ID)
+        if notify_role:
+            try:
+                await channel.send(notify_role.mention)
+            except Exception as e:
+                logger.warning("Ping du rôle de notification impossible : %s", e)
+
     async def _announce(
         self,
         entry: dict,
