@@ -22,6 +22,12 @@ reposter deux fois la même annonce au sondage suivant. Au tout premier
 lancement (fichier absent), l'existant est marqué comme déjà annoncé sans rien
 poster, pour éviter une rafale d'annonces au déploiement.
 
+Nouveau tournoi : dès qu'un tournoi apparaît dans l'API (PREPARATION ou
+EN_COURS), une annonce de présentation — avec l'affiche du tournoi (`imageUrl`)
+si elle a été ajoutée — est postée dans le salon TOURNOIS_ANNONCE_CHANNEL_ID.
+Elle ne dévoile rien du calendrier : les manches restent annoncées selon le
+mode de révélation, comme décrit ci-dessus.
+
 Persistance : les boutons d'inscription sont réenregistrés au chargement du
 cog (bot.add_view) à partir de ce même fichier, ils survivent donc à un
 redémarrage du bot.
@@ -52,6 +58,7 @@ logger = logging.getLogger(__name__)
 SITE_URL = os.getenv("RACES_SITE_URL", "https://paramourduspin.fun")
 BOT_API_SECRET = os.getenv("BOT_API_SECRET", "")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
+TOURNOIS_ANNONCE_CHANNEL_ID = int(os.getenv("TOURNOIS_ANNONCE_CHANNEL_ID", "1505318945761132575"))
 RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
 RACES_NOTIFY_ROLE_ID = int(os.getenv("RACES_NOTIFY_ROLE_ID", "1505321380420255784"))
 
@@ -238,6 +245,7 @@ class TournoiRegistrationView(discord.ui.View):
 def _new_entry() -> dict:
     return {
         "statut_connu": None,
+        "nouveau_annonce": False,
         "immediat_annonce": False,
         "manches_annoncees": [],
         # message_id -> {channel_id, role_id, reputation_min, expire_at}
@@ -342,7 +350,34 @@ class Tournois(commands.Cog):
         embed.set_footer(text="Par amour du spin — inscrivez-vous ci-dessous")
         return embed
 
+    def _build_nouveau_embed(self, champ: dict) -> discord.Embed:
+        titre = champ["nom"] + (f" — {champ['theme']}" if champ.get("theme") else "")
+        nb_manches = len(champ["manches"])
+        lignes = [
+            f"🎯 **{champ['nbCoursesComptees']}** course(s) comptée(s) sur "
+            f"**{nb_manches}** course(s) au total.",
+        ]
+        mode = MODES_LABELS.get(champ.get("modeRevelation"))
+        if mode:
+            lignes.append(f"🔎 {mode}")
+        lignes += [l for l in (_reputation_ligne(champ), _mode_equipe_ligne(champ)) if l]
+        embed = discord.Embed(
+            title=f"🆕 Nouveau tournoi : {titre}",
+            url=f"{SITE_URL}/tournois/{champ['id']}",
+            description="\n\n".join(lignes),
+            color=EMBED_COLOR,
+        )
+        image_url = champ.get("imageUrl")
+        if isinstance(image_url, str) and image_url.startswith(("http://", "https://")):
+            embed.set_image(url=image_url)
+        embed.set_footer(text="Par amour du spin")
+        return embed
+
     # ── Annonce ──────────────────────────────────────────────────────────
+
+    async def _announce_nouveau(self, champ: dict) -> None:
+        channel = await self.bot.fetch_channel(TOURNOIS_ANNONCE_CHANNEL_ID)
+        await channel.send(embed=self._build_nouveau_embed(champ))
 
     async def _announce(
         self,
@@ -441,6 +476,9 @@ class Tournois(commands.Cog):
                 ids_termines.add(cid)
             entry = state.setdefault(cid, _new_entry())
             entry.setdefault("annonces", {})
+            # Tournoi déjà suivi avant l'ajout de cette annonce : considéré
+            # comme déjà présenté (pas de rafale au déploiement).
+            entry.setdefault("nouveau_annonce", True)
             if entry.get("absences"):
                 entry["absences"] = 0
                 changed = True
@@ -451,6 +489,17 @@ class Tournois(commands.Cog):
 
             if champ.get("statut") not in STATUTS_ACTIFS:
                 continue
+
+            if not entry["nouveau_annonce"]:
+                if premier_lancement or not TOURNOIS_ANNONCE_CHANNEL_ID:
+                    entry["nouveau_annonce"] = True
+                else:
+                    try:
+                        await self._announce_nouveau(champ)
+                        entry["nouveau_annonce"] = True
+                        changed = True
+                    except Exception as e:
+                        logger.error("Échec annonce nouveau tournoi %s : %s", cid, e)
 
             if champ["modeRevelation"] == "IMMEDIAT":
                 # Cas particulier : le calendrier complet n'est annoncé que
