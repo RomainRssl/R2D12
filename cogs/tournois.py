@@ -30,6 +30,12 @@ Nettoyage : chaque annonce crée un rôle Discord. Ce rôle est supprimé (et le
 boutons retirés du message) 24 h après la manche concernée — la dernière pour
 le calendrier IMMEDIAT — ou dès que le tournoi n'est plus en PREPARATION /
 EN_COURS, pour ne pas accumuler de rôles (limite Discord : 250).
+
+Sécurité : un tournoi qui disparaît de la réponse de l'API n'est considéré
+comme terminé qu'après plusieurs sondages consécutifs sans lui, et jamais sur
+une réponse entièrement vide (probable erreur côté site). Dans ces cas-là, seul
+le nettoyage à 24 h après la manche s'applique, ce qui évite de supprimer
+toutes les inscriptions sur une simple réponse erronée.
 """
 
 import os
@@ -54,6 +60,9 @@ PARIS = ZoneInfo("Europe/Paris")
 EMBED_COLOR = 0xF07000
 STATUTS_ACTIFS = {"PREPARATION", "EN_COURS"}
 DUREE_ROLE_APRES_MANCHE = timedelta(hours=24)
+# Nombre de sondages consécutifs (5 min chacun) sans un tournoi dans l'API
+# avant de le considérer comme terminé.
+ABSENCES_AVANT_NETTOYAGE = 6
 
 MODES_LABELS = {
     "IMMEDIAT": "Tout révélé dès le lancement",
@@ -425,13 +434,16 @@ class Tournois(commands.Cog):
             state = {}
         changed = premier_lancement
 
-        ids_actifs = set()
+        ids_termines = set()
         for champ in championnats:
             cid = str(champ["id"])
-            if champ.get("statut") in STATUTS_ACTIFS:
-                ids_actifs.add(cid)
+            if champ.get("statut") not in STATUTS_ACTIFS:
+                ids_termines.add(cid)
             entry = state.setdefault(cid, _new_entry())
             entry.setdefault("annonces", {})
+            if entry.get("absences"):
+                entry["absences"] = 0
+                changed = True
 
             if entry["statut_connu"] != champ.get("statut"):
                 entry["statut_connu"] = champ.get("statut")
@@ -489,10 +501,28 @@ class Tournois(commands.Cog):
                         "Échec annonce manche %s (tournoi %s) : %s", manche["id"], cid, e
                     )
 
+        # Tournois absents de la réponse : on ne les considère terminés
+        # qu'après ABSENCES_AVANT_NETTOYAGE sondages consécutifs, et une
+        # réponse entièrement vide ne compte pas (probable erreur du site).
+        ids_presents = {str(c["id"]) for c in championnats}
+        if championnats:
+            for cid, entry in state.items():
+                if cid in ids_presents or not entry.get("annonces"):
+                    continue
+                entry["absences"] = entry.get("absences", 0) + 1
+                changed = True
+                if entry["absences"] >= ABSENCES_AVANT_NETTOYAGE:
+                    ids_termines.add(cid)
+                else:
+                    logger.warning(
+                        "Tournoi %s absent de l'API (%s/%s)",
+                        cid, entry["absences"], ABSENCES_AVANT_NETTOYAGE,
+                    )
+
         # Nettoyage des rôles : annonces expirées (24 h après la manche), ou
-        # toutes les annonces d'un tournoi terminé / disparu de l'API.
+        # toutes les annonces d'un tournoi terminé.
         for cid, entry in state.items():
-            if await self._cleanup_entry(entry, tout=cid not in ids_actifs):
+            if await self._cleanup_entry(entry, tout=cid in ids_termines):
                 changed = True
 
         if changed:
