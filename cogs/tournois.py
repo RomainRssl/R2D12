@@ -12,10 +12,11 @@ de passer à `revelee=true` qu'il n'a pas encore annoncée.
 Chaque manche révélée est annoncée et traitée exactement comme une course
 seule (cogs.calendar._announce_race) : création d'un rôle mentionnable et
 d'un salon privé dédié sous RACES_CATEGORY_ID, annonce avec boutons
-d'inscription dans RACES_CHANNEL_ID, message d'info dupliqué dans le salon
-privé, sélection de catégorie si le tournoi en a plusieurs au programme
-(réutilise cogs.calendar.ClassRegistrationView), et rappel des identifiants
-serveur 5 min avant le départ (check_manche_reminders). Cela vaut pour tous
+d'inscription dans RACES_CHANNEL_ID (avec l'affiche de la manche si elle a
+été ajoutée), message d'info dupliqué dans le salon privé, sélection de
+catégorie si le tournoi en a plusieurs au programme (réutilise
+cogs.calendar.ClassRegistrationView), et rappel des identifiants serveur
+5 min avant le départ (check_manche_reminders). Cela vaut pour tous
 les modes de révélation, y compris IMMEDIAT : dès que le tournoi passe en
 EN_COURS, toutes ses manches sont révélées d'un coup et obtiennent chacune
 leur propre salon, sans traitement groupé particulier.
@@ -347,6 +348,11 @@ class Tournois(commands.Cog):
             embed.add_field(name="\u200b", value="\n\n".join(extras), inline=False)
 
         embed.set_footer(text="Par amour du spin — inscrivez-vous ci-dessous")
+
+        image_url = manche.get("imageUrl")
+        if isinstance(image_url, str) and image_url.startswith(("http://", "https://")):
+            embed.set_image(url=image_url)
+
         return embed
 
     def _build_nouveau_embed(self, champ: dict) -> discord.Embed:
