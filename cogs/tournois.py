@@ -443,34 +443,9 @@ class Tournois(commands.Cog):
             await role.delete(reason="Échec de l'annonce de manche")
             raise
 
-        notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
-        if notify_role:
-            try:
-                await channel.send(notify_role.mention)
-            except Exception as e:
-                logger.warning("Ping du rôle de notification impossible : %s", e)
-
-        # Message d'info dans le salon privé (sans bouton, comme pour une course)
-        await manche_channel.send(embed=self._build_manche_embed(champ, manche))
-
-        # Sélection de catégorie dans le salon privé, si le tournoi en propose
-        # plusieurs — réutilise le même système que les courses multiclasses.
-        categories = [c for c in (champ.get("categories") or []) if c][:5]
-        if len(categories) >= 2:
-            classes_data = {c: [] for c in categories}
-            cls_view = ClassRegistrationView(categories, manche_channel.id)
-            cls_msg = await manche_channel.send(
-                embeds=_build_class_embeds(role_base, classes_data), view=cls_view
-            )
-            regs = _load_registrations()
-            regs[str(manche_channel.id)] = {
-                "title": role_base,
-                "message_id": str(cls_msg.id),
-                "classes": classes_data,
-                "classes_max": None,
-            }
-            _save_registrations(regs)
-
+        # Enregistrée dès que l'annonce est postée : si une étape suivante
+        # échoue, la manche n'est pas réannoncée (rôle + salon + annonce en
+        # double à chaque sondage) et le rôle reste nettoyé à l'expiration.
         entry["annonces"][str(msg.id)] = {
             "channel_id": channel.id,
             "manche_channel_id": manche_channel.id,
@@ -482,6 +457,40 @@ class Tournois(commands.Cog):
             "date": manche.get("date"),
             "notified_5min": False,
         }
+
+        notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
+        if notify_role:
+            try:
+                await channel.send(notify_role.mention)
+            except Exception as e:
+                logger.warning("Ping du rôle de notification impossible : %s", e)
+
+        try:
+            # Message d'info dans le salon privé (sans bouton, comme pour une course)
+            await manche_channel.send(embed=self._build_manche_embed(champ, manche))
+
+            # Sélection de catégorie dans le salon privé, si le tournoi en propose
+            # plusieurs — réutilise le même système que les courses multiclasses.
+            categories = [c for c in (champ.get("categories") or []) if c][:5]
+            if len(categories) >= 2:
+                classes_data = {c: [] for c in categories}
+                cls_view = ClassRegistrationView(categories, manche_channel.id)
+                cls_msg = await manche_channel.send(
+                    embeds=_build_class_embeds(role_base, classes_data), view=cls_view
+                )
+                regs = _load_registrations()
+                regs[str(manche_channel.id)] = {
+                    "title": role_base,
+                    "message_id": str(cls_msg.id),
+                    "classes": classes_data,
+                    "classes_max": None,
+                }
+                _save_registrations(regs)
+        except Exception as e:
+            logger.error(
+                "Manche %s annoncée, mais préparation du salon %s incomplète : %s",
+                manche.get("id"), manche_channel.id, e,
+            )
 
         return msg
 
