@@ -9,33 +9,40 @@ de révélation : il sonde périodiquement GET /api/championnats/bot, qui renvoi
 un booléen `revelee` déjà calculé par manche, et annonce toute manche qui vient
 de passer à `revelee=true` qu'il n'a pas encore annoncée.
 
-Exception : le mode IMMEDIAT est un cas particulier voulu par le staff — le
-site révèle tout le calendrier dès la création du tournoi (même en
-PREPARATION), mais l'annonce Discord, elle, doit attendre que l'admin clique
-sur "Démarrer" (passage à EN_COURS). Ce cog n'annonce donc le calendrier
-complet IMMEDIAT que lorsque le tournoi est vu en EN_COURS, jamais avant.
+Chaque manche révélée est annoncée et traitée exactement comme une course
+seule (cogs.calendar._announce_race) : création d'un rôle mentionnable et
+d'un salon privé dédié sous RACES_CATEGORY_ID, annonce avec boutons
+d'inscription dans RACES_CHANNEL_ID, message d'info dupliqué dans le salon
+privé, sélection de catégorie si le tournoi en a plusieurs au programme
+(réutilise cogs.calendar.ClassRegistrationView), et rappel des identifiants
+serveur 5 min avant le départ (check_manche_reminders). Cela vaut pour tous
+les modes de révélation, y compris IMMEDIAT : dès que le tournoi passe en
+EN_COURS, toutes ses manches sont révélées d'un coup et obtiennent chacune
+leur propre salon, sans traitement groupé particulier.
 
 Déduplication : ce cog garde la trace de ce qu'il a déjà annoncé dans
-data/tournois_state.json (par championnat -> manches déjà annoncées, flag de
-l'annonce globale IMMEDIAT, et messages d'inscription publiés), pour ne jamais
-reposter deux fois la même annonce au sondage suivant. Au tout premier
-lancement (fichier absent), l'existant est marqué comme déjà annoncé sans rien
-poster, pour éviter une rafale d'annonces au déploiement.
+data/tournois_state.json (par championnat -> manches déjà annoncées et
+messages d'inscription publiés), pour ne jamais reposter deux fois la même
+annonce au sondage suivant. Au tout premier lancement (fichier absent),
+l'existant est marqué comme déjà annoncé sans rien poster, pour éviter une
+rafale d'annonces au déploiement.
 
-Nouveau tournoi : dès qu'un tournoi apparaît dans l'API (PREPARATION ou
-EN_COURS), une annonce de présentation — avec l'affiche du tournoi (`imageUrl`)
-si elle a été ajoutée — est postée dans le salon TOURNOIS_ANNONCE_CHANNEL_ID.
-Elle ne dévoile rien du calendrier : les manches restent annoncées selon le
-mode de révélation, comme décrit ci-dessus.
+Nouveau tournoi : dès que le tournoi passe en EN_COURS (clic "Démarrer" par
+le staff), une annonce de présentation — avec l'affiche du tournoi
+(`imageUrl`) si elle a été ajoutée — est postée dans le salon communication
+TOURNOIS_ANNONCE_CHANNEL_ID, purement informative. Elle ne dévoile rien du
+calendrier : les manches restent annoncées selon le mode de révélation,
+comme décrit ci-dessus.
 
-Persistance : les boutons d'inscription sont réenregistrés au chargement du
-cog (bot.add_view) à partir de ce même fichier, ils survivent donc à un
-redémarrage du bot.
+Persistance : les boutons d'inscription (tournoi et sélection de catégorie)
+sont réenregistrés au chargement du cog (bot.add_view) à partir de ce même
+fichier, ils survivent donc à un redémarrage du bot.
 
-Nettoyage : chaque annonce crée un rôle Discord. Ce rôle est supprimé (et les
-boutons retirés du message) 24 h après la manche concernée — la dernière pour
-le calendrier IMMEDIAT — ou dès que le tournoi n'est plus en PREPARATION /
-EN_COURS, pour ne pas accumuler de rôles (limite Discord : 250).
+Nettoyage : chaque annonce de manche crée un rôle Discord (le salon, lui,
+n'est jamais supprimé — comme pour une course seule). Ce rôle est supprimé
+(et les boutons retirés du message) 24 h après la manche concernée, ou dès
+que le tournoi n'est plus en PREPARATION / EN_COURS, pour ne pas accumuler de
+rôles (limite Discord : 250).
 
 Sécurité : un tournoi qui disparaît de la réponse de l'API n'est considéré
 comme terminé qu'après plusieurs sondages consécutifs sans lui, et jamais sur
@@ -53,12 +60,21 @@ from zoneinfo import ZoneInfo
 import discord
 from discord.ext import commands, tasks
 
+from .calendar import (
+    ClassRegistrationView,
+    _build_class_embeds,
+    _load_registrations,
+    _save_registrations,
+    _slugify,
+)
+
 logger = logging.getLogger(__name__)
 
 SITE_URL = os.getenv("RACES_SITE_URL", "https://paramourduspin.fun")
 BOT_API_SECRET = os.getenv("BOT_API_SECRET", "")
 RACES_CHANNEL_ID = int(os.getenv("RACES_CHANNEL_ID", "0"))
-TOURNOIS_ANNONCE_CHANNEL_ID = int(os.getenv("TOURNOIS_ANNONCE_CHANNEL_ID", "1505318945761132575"))
+RACES_CATEGORY_ID = int(os.getenv("RACES_CATEGORY_ID", "1399427481945247817"))
+TOURNOIS_ANNONCE_CHANNEL_ID = int(os.getenv("TOURNOIS_ANNONCE_CHANNEL_ID", "1505318885673664594"))
 RACES_STAFF_ROLE_ID = int(os.getenv("RACES_STAFF_ROLE_ID", "1424791316881211412"))
 RACES_NOTIFY_ROLE_ID = int(os.getenv("RACES_NOTIFY_ROLE_ID", "1505321380420255784"))
 
@@ -246,9 +262,9 @@ def _new_entry() -> dict:
     return {
         "statut_connu": None,
         "nouveau_annonce": False,
-        "immediat_annonce": False,
         "manches_annoncees": [],
-        # message_id -> {channel_id, role_id, reputation_min, expire_at}
+        # message_id -> {channel_id, role_id, reputation_min, expire_at,
+        # server_name, server_password, date, notified_5min}
         "annonces": {},
     }
 
@@ -266,10 +282,14 @@ class Tournois(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.check_tournois_loop.start()
+        self.check_manche_reminders.start()
 
     async def cog_load(self):
         # Réenregistre les boutons d'inscription des annonces encore actives,
-        # sinon ils ne répondent plus après un redémarrage du bot.
+        # sinon ils ne répondent plus après un redémarrage du bot. Les vues de
+        # sélection de catégorie (data/race_registrations.json, partagé avec
+        # cogs.calendar) sont, elles, déjà restaurées par le on_ready de ce
+        # dernier — pas besoin de le refaire ici.
         for entry in (_load_state() or {}).values():
             for msg_id, annonce in entry.get("annonces", {}).items():
                 view = TournoiRegistrationView(annonce["role_id"], annonce.get("reputation_min"))
@@ -277,6 +297,7 @@ class Tournois(commands.Cog):
 
     def cog_unload(self):
         self.check_tournois_loop.cancel()
+        self.check_manche_reminders.cancel()
 
     # ── Appel API site ────────────────────────────────────────────────────
 
@@ -301,47 +322,25 @@ class Tournois(commands.Cog):
 
     # ── Construction des embeds ──────────────────────────────────────────
 
-    def _build_manche_embed(self, champ: dict, manche: dict) -> discord.Embed:
+    def _build_manche_embed(self, champ: dict, manche: dict, manche_channel=None) -> discord.Embed:
         titre = champ["nom"] + (f" — {champ['theme']}" if champ.get("theme") else "")
         embed = discord.Embed(
             title=f"🏁 {titre} — Manche {manche['ordre']}",
             color=EMBED_COLOR,
         )
-        circuit = manche.get("circuit") or f"Circuit mystère (manche {manche['ordre']})"
+        circuit = manche.get("circuitCourt") or manche.get("circuit") or f"Circuit mystère (manche {manche['ordre']})"
         embed.add_field(name="Circuit", value=circuit, inline=True)
         if manche.get("date"):
             date_str, heure_str = _format_date_heure(manche["date"])
             embed.add_field(name="Date", value=date_str.capitalize(), inline=True)
             embed.add_field(name="Heure", value=f"{heure_str} (heure de Paris)", inline=True)
-        categories = manche.get("categories") or []
+        # Catégories du tournoi (figées au démarrage, identiques pour toutes
+        # les manches) — indicatives pour les pilotes.
+        categories = champ.get("categories") or []
         if categories:
             embed.add_field(name="Catégories", value=", ".join(categories), inline=False)
-
-        extras = [l for l in (_reputation_ligne(champ), _mode_equipe_ligne(champ)) if l]
-        if extras:
-            embed.add_field(name="\u200b", value="\n\n".join(extras), inline=False)
-
-        embed.set_footer(text="Par amour du spin — inscrivez-vous ci-dessous")
-        return embed
-
-    def _build_calendrier_embed(self, champ: dict) -> discord.Embed:
-        titre = champ["nom"] + (f" — {champ['theme']}" if champ.get("theme") else "")
-        nb_manches = len(champ["manches"])
-        nb_comptees = champ["nbCoursesComptees"]
-        description = f"🎯 **{nb_comptees}** course(s) comptée(s) sur **{nb_manches}** course(s) au total."
-        embed = discord.Embed(
-            title=f"🏆 {titre} — Calendrier complet",
-            description=description,
-            color=EMBED_COLOR,
-        )
-        for manche in champ["manches"]:
-            circuit = manche.get("circuit") or f"Circuit mystère (manche {manche['ordre']})"
-            if manche.get("date"):
-                date_str, heure_str = _format_date_heure(manche["date"])
-                valeur = f"{circuit} — {date_str.capitalize()} à {heure_str}"
-            else:
-                valeur = circuit
-            embed.add_field(name=f"Manche {manche['ordre']}", value=valeur, inline=False)
+        if manche_channel:
+            embed.add_field(name="💬 Salon", value=manche_channel.mention, inline=False)
 
         extras = [l for l in (_reputation_ligne(champ), _mode_equipe_ligne(champ)) if l]
         if extras:
@@ -386,33 +385,57 @@ class Tournois(commands.Cog):
             except Exception as e:
                 logger.warning("Ping du rôle de notification impossible : %s", e)
 
-    async def _announce(
-        self,
-        entry: dict,
-        embed: discord.Embed,
-        role_name: str,
-        reputation_min: int | None,
-        expire_at: str | None,
-    ) -> discord.Message:
-        """Crée le rôle, poste l'annonce avec ses boutons et l'enregistre dans
-        `entry["annonces"]` (pour la persistance des boutons et le nettoyage)."""
+    async def _announce_manche(self, entry: dict, champ: dict, manche: dict) -> discord.Message:
+        """Traite une manche exactement comme une course seule
+        (cogs.calendar._announce_race) : rôle + salon privé dédié, annonce
+        avec boutons dans RACES_CHANNEL_ID, message d'info dupliqué dans le
+        salon, sélection de catégorie si plusieurs sont au programme du
+        tournoi. Enregistre l'annonce dans `entry["annonces"]` (persistance
+        des boutons, nettoyage, rappel serveur)."""
         channel = await self.bot.fetch_channel(RACES_CHANNEL_ID)
         guild = channel.guild
-        role = await guild.create_role(name=role_name[:100], mentionable=True)
+        reputation_min = champ.get("reputationMin")
+
+        role_base = manche.get("nomSalon") or f"{champ['nom']} — Manche {manche['ordre']}"
+        role = await guild.create_role(name=role_base[:100], mentionable=True)
+
+        category = guild.get_channel(RACES_CATEGORY_ID)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+            role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True
+            ),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            ),
+        }
+        staff_role = guild.get_role(RACES_STAFF_ROLE_ID)
+        if staff_role:
+            overwrites[staff_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
+
+        slug_base = manche.get("nomSalon") or f"{champ['nom']}-manche-{manche['ordre']}"
         try:
-            view = TournoiRegistrationView(role.id, reputation_min)
-            msg = await channel.send(embed=embed, view=view)
+            manche_channel = await guild.create_text_channel(
+                name=_slugify(slug_base),
+                category=category,
+                overwrites=overwrites,
+            )
         except Exception:
-            # Pas de rôle orphelin si l'envoi échoue
-            await role.delete(reason="Échec de l'annonce du tournoi")
+            await role.delete(reason="Échec de la création du salon de manche")
             raise
 
-        entry["annonces"][str(msg.id)] = {
-            "channel_id": channel.id,
-            "role_id": role.id,
-            "reputation_min": reputation_min,
-            "expire_at": expire_at,
-        }
+        try:
+            view = TournoiRegistrationView(role.id, reputation_min)
+            msg = await channel.send(
+                embed=self._build_manche_embed(champ, manche, manche_channel), view=view
+            )
+        except Exception:
+            # Pas de salon/rôle orphelin si l'envoi échoue
+            await manche_channel.delete(reason="Échec de l'annonce de manche")
+            await role.delete(reason="Échec de l'annonce de manche")
+            raise
 
         notify_role = guild.get_role(RACES_NOTIFY_ROLE_ID)
         if notify_role:
@@ -420,6 +443,39 @@ class Tournois(commands.Cog):
                 await channel.send(notify_role.mention)
             except Exception as e:
                 logger.warning("Ping du rôle de notification impossible : %s", e)
+
+        # Message d'info dans le salon privé (sans bouton, comme pour une course)
+        await manche_channel.send(embed=self._build_manche_embed(champ, manche))
+
+        # Sélection de catégorie dans le salon privé, si le tournoi en propose
+        # plusieurs — réutilise le même système que les courses multiclasses.
+        categories = [c for c in (champ.get("categories") or []) if c][:5]
+        if len(categories) >= 2:
+            classes_data = {c: [] for c in categories}
+            cls_view = ClassRegistrationView(categories, manche_channel.id)
+            cls_msg = await manche_channel.send(
+                embeds=_build_class_embeds(role_base, classes_data), view=cls_view
+            )
+            regs = _load_registrations()
+            regs[str(manche_channel.id)] = {
+                "title": role_base,
+                "message_id": str(cls_msg.id),
+                "classes": classes_data,
+                "classes_max": None,
+            }
+            _save_registrations(regs)
+
+        entry["annonces"][str(msg.id)] = {
+            "channel_id": channel.id,
+            "manche_channel_id": manche_channel.id,
+            "role_id": role.id,
+            "reputation_min": reputation_min,
+            "expire_at": _expiration([manche.get("date")]),
+            "server_name": manche.get("serverName") or "",
+            "server_password": manche.get("serverPassword") or "",
+            "date": manche.get("date"),
+            "notified_5min": False,
+        }
 
         return msg
 
@@ -497,7 +553,11 @@ class Tournois(commands.Cog):
             if champ.get("statut") not in STATUTS_ACTIFS:
                 continue
 
-            if not entry["nouveau_annonce"]:
+            # Annonce "nouveau tournoi" (avec affiche) : seulement une fois le
+            # tournoi démarré (clic "Démarrer" -> EN_COURS), jamais en
+            # PREPARATION, même si ses manches peuvent déjà être révélées côté
+            # site en mode IMMEDIAT.
+            if not entry["nouveau_annonce"] and champ.get("statut") == "EN_COURS":
                 if premier_lancement or not TOURNOIS_ANNONCE_CHANNEL_ID:
                     entry["nouveau_annonce"] = True
                 else:
@@ -508,33 +568,11 @@ class Tournois(commands.Cog):
                     except Exception as e:
                         logger.error("Échec annonce nouveau tournoi %s : %s", cid, e)
 
-            if champ["modeRevelation"] == "IMMEDIAT":
-                # Cas particulier : le calendrier complet n'est annoncé que
-                # lorsque le tournoi est en EN_COURS (clic "Démarrer"), jamais
-                # en PREPARATION — même si le site, lui, montre déjà tout dès
-                # la création (règle métier demandée explicitement par le staff).
-                if entry["immediat_annonce"] or champ["statut"] != "EN_COURS":
-                    continue
-                if premier_lancement:
-                    entry["immediat_annonce"] = True
-                    entry["manches_annoncees"] = [m["id"] for m in champ["manches"]]
-                    continue
-                try:
-                    embed = self._build_calendrier_embed(champ)
-                    expire_at = _expiration([m.get("date") for m in champ["manches"]])
-                    await self._announce(
-                        entry, embed, champ["nom"], champ.get("reputationMin"), expire_at
-                    )
-                    entry["immediat_annonce"] = True
-                    entry["manches_annoncees"] = [m["id"] for m in champ["manches"]]
-                    changed = True
-                except Exception as e:
-                    logger.error("Échec annonce calendrier tournoi %s : %s", cid, e)
-                continue
-
-            # DELAI / CLOTURE_PRECEDENTE / MANUEL : une annonce par manche,
-            # dès qu'elle passe à revelee=true (peu importe pourquoi — le
-            # site a déjà tranché).
+            # Une annonce par manche, dès qu'elle passe à revelee=true (peu
+            # importe le mode de révélation — le site a déjà tranché). En
+            # IMMEDIAT, toutes les manches passent à revelee=true d'un coup au
+            # démarrage : elles sont alors toutes annoncées ici, chacune avec
+            # son propre salon, sans traitement groupé particulier.
             for manche in champ["manches"]:
                 if not manche["revelee"]:
                     continue
@@ -544,12 +582,7 @@ class Tournois(commands.Cog):
                     entry["manches_annoncees"].append(manche["id"])
                     continue
                 try:
-                    embed = self._build_manche_embed(champ, manche)
-                    role_name = f"{champ['nom']} — Manche {manche['ordre']}"
-                    expire_at = _expiration([manche.get("date")])
-                    await self._announce(
-                        entry, embed, role_name, champ.get("reputationMin"), expire_at
-                    )
+                    await self._announce_manche(entry, champ, manche)
                     entry["manches_annoncees"].append(manche["id"])
                     changed = True
                 except Exception as e:
@@ -586,6 +619,72 @@ class Tournois(commands.Cog):
 
     @check_tournois_loop.before_loop
     async def before_check(self):
+        await self.bot.wait_until_ready()
+
+    # ── Rappel 5 min avant la manche ──────────────────────────────────────
+
+    @tasks.loop(minutes=1)
+    async def check_manche_reminders(self):
+        """Envoie les identifiants serveur dans le salon de manche 5 min avant
+        le départ — même principe que cogs.calendar.check_race_reminders."""
+        now = datetime.now(PARIS)
+        state = _load_state()
+        if not state:
+            return
+        changed = False
+
+        for entry in state.values():
+            for msg_id, annonce in entry.get("annonces", {}).items():
+                if annonce.get("notified_5min"):
+                    continue
+                if not annonce.get("date") or not annonce.get("manche_channel_id"):
+                    continue
+                if not annonce.get("server_name") and not annonce.get("server_password"):
+                    continue
+                try:
+                    manche_dt = _parse_iso(annonce["date"]).astimezone(PARIS)
+                except ValueError:
+                    continue
+
+                delta = manche_dt - now
+                if not (timedelta(minutes=4) <= delta <= timedelta(minutes=6)):
+                    continue
+
+                try:
+                    manche_channel = await self.bot.fetch_channel(int(annonce["manche_channel_id"]))
+                except Exception as e:
+                    logger.warning(
+                        "Rappel 5min tournoi — salon introuvable (%s) : %s",
+                        annonce["manche_channel_id"], e,
+                    )
+                    annonce["notified_5min"] = True
+                    changed = True
+                    continue
+
+                embed = discord.Embed(title="🚦 Départ dans 5 minutes", color=0xE63946)
+                if annonce.get("server_name"):
+                    embed.add_field(name="🖥️ Nom du serveur", value=annonce["server_name"], inline=False)
+                if annonce.get("server_password"):
+                    embed.add_field(name="🔒 Mot de passe", value=annonce["server_password"], inline=False)
+                embed.set_footer(text="Par amour du spin · Bonne course ! 🏎️")
+
+                try:
+                    await manche_channel.send(embed=embed)
+                    logger.info("Rappel 5min tournoi envoyé dans %s", manche_channel.id)
+                except Exception as e:
+                    logger.error(
+                        "Rappel 5min tournoi — envoi impossible dans %s : %s",
+                        annonce["manche_channel_id"], e,
+                    )
+
+                annonce["notified_5min"] = True
+                changed = True
+
+        if changed:
+            _save_state(state)
+
+    @check_manche_reminders.before_loop
+    async def before_reminders(self):
         await self.bot.wait_until_ready()
 
 
