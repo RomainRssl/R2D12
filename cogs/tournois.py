@@ -323,6 +323,17 @@ class Tournois(commands.Cog):
 
     # ── Construction des embeds ──────────────────────────────────────────
 
+    def _categories_manche(self, champ: dict, manche: dict) -> list[str]:
+        """Catégorie(s) à afficher/proposer pour CETTE manche. En Track Master
+        (interCategorie=true), chaque manche a sa propre catégorie choisie
+        manche par manche (categorieManche) — la liste figée du tournoi
+        (`categories`) ne veut rien dire manche par manche dans ce mode, donc
+        on ne l'utilise que dans le mode classique (mêmes catégories partout)."""
+        if champ.get("interCategorie"):
+            cat = manche.get("categorieManche")
+            return [cat] if cat else []
+        return [c for c in (champ.get("categories") or []) if c]
+
     def _build_manche_embed(self, champ: dict, manche: dict, manche_channel=None) -> discord.Embed:
         titre = champ["nom"] + (f" — {champ['theme']}" if champ.get("theme") else "")
         embed = discord.Embed(
@@ -336,10 +347,12 @@ class Tournois(commands.Cog):
             embed.add_field(name="Date", value=date_str.capitalize(), inline=True)
             embed.add_field(name="Heure", value=f"{heure_str} (heure de Paris)", inline=True)
         # Catégories du tournoi (figées au démarrage, identiques pour toutes
-        # les manches) — indicatives pour les pilotes.
-        categories = champ.get("categories") or []
+        # les manches) — indicatives pour les pilotes. En Track Master, une
+        # seule catégorie propre à cette manche (voir _categories_manche).
+        categories = self._categories_manche(champ, manche)
         if categories:
-            embed.add_field(name="Catégories", value=", ".join(categories), inline=False)
+            label = "Catégorie" if champ.get("interCategorie") else "Catégories"
+            embed.add_field(name=label, value=", ".join(categories), inline=False)
         if manche_channel:
             embed.add_field(name="💬 Salon", value=manche_channel.mention, inline=False)
 
@@ -471,7 +484,9 @@ class Tournois(commands.Cog):
 
             # Sélection de catégorie dans le salon privé, si le tournoi en propose
             # plusieurs — réutilise le même système que les courses multiclasses.
-            categories = [c for c in (champ.get("categories") or []) if c][:5]
+            # En Track Master, cette manche n'a qu'une seule catégorie (voir
+            # _categories_manche) : rien à choisir, elle est déjà dans l'embed.
+            categories = self._categories_manche(champ, manche)[:5]
             if len(categories) >= 2:
                 classes_data = {c: [] for c in categories}
                 cls_view = ClassRegistrationView(categories, manche_channel.id)
