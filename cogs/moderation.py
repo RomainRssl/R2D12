@@ -185,6 +185,62 @@ class Moderation(commands.Cog):
         embed.add_field(name="Raison", value=raison)
         await interaction.response.send_message(embed=embed)
 
+    # ── Vocal ─────────────────────────────────────────────────────────────────
+
+    @app_commands.command(name="moveall", description="Déplacer tous les membres d'un salon vocal vers un autre")
+    @app_commands.describe(source="Le salon vocal d'origine", destination="Le salon vocal de destination")
+    @app_commands.default_permissions(move_members=True)
+    @app_commands.guild_only()
+    async def moveall(
+        self,
+        interaction: discord.Interaction,
+        source: discord.VoiceChannel | discord.StageChannel,
+        destination: discord.VoiceChannel | discord.StageChannel,
+    ):
+        if source.id == destination.id:
+            await interaction.response.send_message("Le salon d'origine et la destination sont identiques.", ephemeral=True)
+            return
+
+        me = interaction.guild.me
+        for salon in (source, destination):
+            perms = salon.permissions_for(me)
+            if not (perms.move_members and perms.connect and perms.view_channel):
+                await interaction.response.send_message(
+                    f"Je n'ai pas les permissions **Déplacer des membres** / **Se connecter** sur {salon.mention}.",
+                    ephemeral=True,
+                )
+                return
+
+        membres = list(source.members)
+        if not membres:
+            await interaction.response.send_message(f"Aucun membre dans {source.mention}.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+
+        deplaces, echecs = 0, []
+        raison = f"/moveall par {interaction.user}"
+        for membre in membres:
+            try:
+                await membre.move_to(destination, reason=raison)
+                deplaces += 1
+            except (discord.Forbidden, discord.HTTPException):
+                echecs.append(membre.display_name)
+
+        color = discord.Color.green() if not echecs else discord.Color.orange()
+        embed = discord.Embed(
+            title="Membres déplacés",
+            description=f"**{deplaces}** membre(s) déplacé(s) de {source.mention} vers {destination.mention}.",
+            color=color,
+        )
+        if echecs:
+            liste = ", ".join(echecs)
+            if len(liste) > 1000:
+                liste = liste[:1000] + "…"
+            embed.add_field(name=f"Échecs ({len(echecs)})", value=liste, inline=False)
+        embed.set_footer(text=f"Par {interaction.user}")
+        await interaction.followup.send(embed=embed)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Moderation(bot))

@@ -87,7 +87,8 @@ class General(commands.Cog):
                 "`/clearwarnings @membre` — Effacer les avertissements\n"
                 "`/mute @membre [minutes] [raison]` — Mettre en sourdine\n"
                 "`/unmute @membre` — Retirer la sourdine\n"
-                "`/unban <user_id>` — Débannir"
+                "`/unban <user_id>` — Débannir\n"
+                "`/moveall <source> <destination>` — Déplacer tous les membres d'un vocal"
             ),
             inline=False,
         )
