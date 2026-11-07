@@ -200,6 +200,7 @@ L'adresse IP se trouve dans votre espace client IONOS.
 | Manage Channels | Compteurs vocaux, Tickets |
 | Manage Webhooks | Relais de messages |
 | Moderate Members | Mute (timeout) |
+| Move Members | Moveall (déplacement vocal) |
 | Send Messages + Embed Links | Tous les modules |
 | Add Reactions | Rôles emoji |
 | Read Message History | Sondages, Giveaways, Rôles réactions |
@@ -241,6 +242,7 @@ Commandes réservées aux modérateurs.
 | `/clearwarnings @membre` | Effacer tous les avertissements d'un membre |
 | `/mute @membre [minutes] [raison]` | Mettre en sourdine (timeout Discord natif) |
 | `/unmute @membre` | Retirer la sourdine |
+| `/moveall <source> <destination>` | Déplacer tous les membres d'un salon vocal vers un autre |
 
 ---
 
