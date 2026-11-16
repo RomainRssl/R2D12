@@ -47,6 +47,7 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.splits")
         await self.load_extension("cogs.message")
         await self.load_extension("cogs.tournois")
+        await self.load_extension("cogs.lmu_sync")
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))

@@ -611,6 +611,34 @@ Organisez des sessions de course et gérez les inscriptions.
 
 ---
 
+### LMU — Synchronisation des horaires d'endurance
+
+Le cog `lmu_sync` écoute le salon « maj LMU » (`LMU_CHANNEL_ID`) et transmet les 50 derniers messages au site PADS via `POST /api/endurance/bot-sync`. Le site en extrait les heures de départ des sessions LMU et les pose sur le bon week-end d'endurance.
+
+**Comportement :**
+- **Au démarrage** (`on_ready`) : envoi de rattrapage pour récupérer les annonces manquées.
+- **À chaque message** (`on_message` / `on_message_edit`) dans ce salon : anti-rafale de 60 s — plusieurs messages d'affilée déclenchent un seul envoi, après la rafale.
+- **Toutes les heures** : filet de sécurité.
+
+Les messages de bots et de webhooks sont inclus (les annonces LMU suivies en sont).
+
+**Variables `.env` :**
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `LMU_CHANNEL_ID` | `1571872951349813398` | ID du salon « maj LMU » |
+| `RACES_SITE_URL` | `https://paramourduspin.fun` | URL de base du site |
+| `BOT_API_SECRET` | — | Secret partagé bot ↔ site |
+
+**Vérification en développement :**
+1. Démarrez le bot et consultez les logs — vous devez voir `lmu_sync — rattrapage au démarrage` suivi de `lmu_sync — X message(s) lus` (X > 0 si le salon contient des messages).
+2. Postez 3 messages rapides dans le salon : un seul `lmu_sync — burst : …` doit partir, 60 secondes après le dernier message.
+3. La réponse JSON du site est loguée : si `created` ou `sessionsFilled` n'est pas vide, une ligne d'info apparaît ; `warning` ou `errors` non vides génèrent un avertissement.
+
+> Le salon doit être visible par le bot et l'intent **Message Content** doit être coché dans le [Portail Développeur Discord](https://discord.com/developers/applications).
+
+---
+
 ### SimRacing — Championnats
 
 Gérez des championnats complets avec points, classements et gestion des incidents.
