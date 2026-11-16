@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 import logging
 import aiohttp
 import anthropic
@@ -60,7 +61,18 @@ def _load_registrations() -> dict:
 class Pregrid(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._anthropic = None
         self.check_pregrid_loop.start()
+
+    def _client(self) -> anthropic.AsyncAnthropic | None:
+        """Client Anthropic mis en cache. None si la clé API est absente/invalide."""
+        if self._anthropic is None:
+            try:
+                self._anthropic = anthropic.AsyncAnthropic(max_retries=3, timeout=30.0)
+            except Exception as e:
+                logger.error("Client Anthropic indisponible : %s", e)
+                return None
+        return self._anthropic
 
     def cog_unload(self):
         self.check_pregrid_loop.cancel()
@@ -74,42 +86,41 @@ class Pregrid(commands.Cog):
 
     # ── Site API calls ───────────────────────────────────────────────────────
 
+    async def _get_json(self, url: str, *, retries: int = 3):
+        """GET JSON avec retries et backoff. Retourne None si tout échoue."""
+        for attempt in range(retries):
+            try:
+                async with aiohttp.ClientSession() as s:
+                    async with s.get(
+                        url,
+                        headers={"x-bot-secret": BOT_API_SECRET},
+                        timeout=aiohttp.ClientTimeout(total=15),
+                    ) as r:
+                        if r.status == 200:
+                            return await r.json()
+                        logger.warning(
+                            "API %s — statut %s (tentative %d/%d)",
+                            url, r.status, attempt + 1, retries,
+                        )
+            except Exception as e:
+                logger.warning(
+                    "Erreur API %s : %s (tentative %d/%d)",
+                    url, e, attempt + 1, retries,
+                )
+            if attempt < retries - 1:
+                await asyncio.sleep(2 ** attempt)
+        return None
+
     async def _fetch_by_discord(self, discord_ids: list[str]) -> list[dict]:
         if not discord_ids:
             return []
         ids_param = ",".join(discord_ids)
         url = f"{SITE_URL}/api/players/by-discord?discordIds={ids_param}"
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(
-                    url,
-                    headers={"x-bot-secret": BOT_API_SECRET},
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as r:
-                    if r.status != 200:
-                        logger.error("by-discord API — statut %s", r.status)
-                        return []
-                    return await r.json()
-        except Exception as e:
-            logger.error("Erreur by-discord API : %s", e)
-            return []
+        return await self._get_json(url) or []
 
     async def _fetch_ladder(self, car_class: str) -> list[dict]:
         url = f"{SITE_URL}/api/players/ladder?carClass={car_class}"
-        try:
-            async with aiohttp.ClientSession() as s:
-                async with s.get(
-                    url,
-                    headers={"x-bot-secret": BOT_API_SECRET},
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as r:
-                    if r.status != 200:
-                        logger.error("ladder API — statut %s pour %s", r.status, car_class)
-                        return []
-                    return await r.json()
-        except Exception as e:
-            logger.error("Erreur ladder API (%s) : %s", car_class, e)
-            return []
+        return await self._get_json(url) or []
 
     # ── Laïus generation ─────────────────────────────────────────────────────
 
@@ -216,11 +227,13 @@ class Pregrid(commands.Cog):
             user_prompt += "\n\nAbsents notables dans les fenêtres de points :\n" + "\n".join(absent_lines)
         user_prompt += "\n\nRédige le laïus d'avant-course pour cette classe."
 
+        client = self._client()
+        if client is None:
+            return None
         try:
-            client = anthropic.AsyncAnthropic()
             message = await client.messages.create(
                 model="claude-sonnet-4-5",
-                max_tokens=400,
+                max_tokens=600,
                 system=(
                     "Tu es le commentateur officiel de la ligue SimRacing PADS (Par amour du spin). "
                     "Tu rédiges des laïus d'avant-course en français, style journaliste sportif percutant. "
@@ -232,7 +245,10 @@ class Pregrid(commands.Cog):
             )
             return message.content[0].text
         except Exception as e:
-            logger.error("Erreur Anthropic pour classe %s : %s", class_name, e)
+            logger.error(
+                "Erreur Anthropic pour classe %s : %s (%s)",
+                class_name, e, type(e).__name__,
+            )
             return None
 
     async def _post_laius(
@@ -297,8 +313,17 @@ class Pregrid(commands.Cog):
             await ephemeral_interaction.followup.send(embeds=embeds, ephemeral=True)
         else:
             channel = target_channel or await self.bot.fetch_channel(channel_id)
+            sent = 0
             for embed in embeds:
-                await channel.send(embed=embed)
+                try:
+                    await channel.send(embed=embed)
+                    sent += 1
+                except Exception as e:
+                    logger.error("Échec envoi embed pour channel %s : %s", channel_id, e)
+            # Si rien n'est parti, on lève pour que la boucle retente ; sinon on
+            # considère le laïus posté (pas de re-post des classes déjà envoyées).
+            if sent == 0:
+                raise RuntimeError("Aucun embed n'a pu être envoyé")
 
     # ── Background task ──────────────────────────────────────────────────────
 
@@ -334,7 +359,10 @@ class Pregrid(commands.Cog):
 
                 delta = race_dt - now
                 target = timedelta(minutes=minutes_before)
-                if not (target - timedelta(minutes=1) <= delta <= target + timedelta(minutes=1)):
+                # Poster dès qu'on entre dans la fenêtre d'avant-course et tant que
+                # la course n'a pas démarré — au lieu d'une fenêtre d'1 minute qui
+                # rate le créneau si le bot redémarre ou si une boucle est lente.
+                if not (timedelta(0) < delta <= target):
                     continue
 
                 try:
