@@ -323,6 +323,56 @@ class Tournois(commands.Cog):
         self.check_tournois_loop.cancel()
         self.check_manche_reminders.cancel()
 
+    # ── Commandes admin ───────────────────────────────────────────────────
+
+    tournois_group = app_commands.Group(
+        name="tournois",
+        description="Administration des tournois",
+        guild_only=True,
+    )
+
+    @tournois_group.command(name="refresh_inscrits", description="Met à jour le compteur d'inscrits sur toutes les annonces actives")
+    @app_commands.checks.has_role(RACES_STAFF_ROLE_ID)
+    async def refresh_inscrits(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        state = _load_state()
+        if not state:
+            await interaction.followup.send("Aucune donnée de tournoi.", ephemeral=True)
+            return
+
+        updated = 0
+        errors = 0
+        for entry in state.values():
+            for msg_id, annonce in entry.get("annonces", {}).items():
+                try:
+                    role = interaction.guild.get_role(annonce["role_id"])
+                    if not role:
+                        continue
+                    count = len(role.members)
+                    channel = await self.bot.fetch_channel(annonce["channel_id"])
+                    msg = await channel.fetch_message(int(msg_id))
+                    if not msg.embeds:
+                        continue
+                    emb = msg.embeds[0].copy()
+                    found = False
+                    for i, field in enumerate(emb.fields):
+                        if "Inscrits" in field.name:
+                            emb.set_field_at(i, name=field.name, value=str(count), inline=field.inline)
+                            found = True
+                            break
+                    if not found:
+                        emb.add_field(name="👤 Inscrits", value=str(count), inline=True)
+                    await msg.edit(embed=emb)
+                    updated += 1
+                except Exception as e:
+                    logger.warning("refresh_inscrits — msg %s : %s", msg_id, e)
+                    errors += 1
+
+        await interaction.followup.send(
+            f"✅ {updated} annonce(s) mise(s) à jour." + (f" ⚠️ {errors} erreur(s)." if errors else ""),
+            ephemeral=True,
+        )
+
     # ── Appel API site ────────────────────────────────────────────────────
 
     async def _fetch_championnats(self) -> list | None:
