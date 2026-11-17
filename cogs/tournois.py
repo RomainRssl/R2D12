@@ -179,6 +179,26 @@ async def _fetch_reputation(discord_id: str) -> int | None:
         return None
 
 
+async def _update_tournoi_inscrit(interaction: discord.Interaction, role: discord.Role):
+    try:
+        count = len(role.members)
+        msg = interaction.message
+        if not msg or not msg.embeds:
+            return
+        emb = msg.embeds[0].copy()
+        updated = False
+        for i, field in enumerate(emb.fields):
+            if "Inscrits" in field.name:
+                emb.set_field_at(i, name=field.name, value=str(count), inline=field.inline)
+                updated = True
+                break
+        if not updated:
+            emb.add_field(name="👤 Inscrits", value=str(count), inline=True)
+        await msg.edit(embed=emb)
+    except Exception as e:
+        logger.warning("Mise à jour inscrit tournoi : %s", e)
+
+
 class TournoiButton(discord.ui.Button):
     def __init__(self, role_id: int, reputation_min: int | None = None):
         super().__init__(
@@ -219,11 +239,13 @@ class TournoiButton(discord.ui.Button):
                 )
                 return
             await interaction.user.add_roles(role)
+            await _update_tournoi_inscrit(interaction, role)
             await interaction.followup.send(f"✅ Inscrit pour **{role.name}** !", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
         await interaction.user.add_roles(role)
+        await _update_tournoi_inscrit(interaction, role)
         await interaction.followup.send(f"✅ Inscrit pour **{role.name}** !", ephemeral=True)
 
 
@@ -247,6 +269,7 @@ class TournoiUnregisterButton(discord.ui.Button):
             return
         await interaction.response.defer(ephemeral=True)
         await interaction.user.remove_roles(role)
+        await _update_tournoi_inscrit(interaction, role)
         await interaction.followup.send(f"❌ Désinscrit de **{role.name}**.", ephemeral=True)
 
 
@@ -353,6 +376,8 @@ class Tournois(commands.Cog):
         if categories:
             label = "Catégorie" if champ.get("interCategorie") else "Catégories"
             embed.add_field(name=label, value=", ".join(categories), inline=False)
+        embed.add_field(name="👤 Inscrits", value="0", inline=True)
+
         if manche_channel:
             embed.add_field(name="💬 Salon", value=manche_channel.mention, inline=False)
 
