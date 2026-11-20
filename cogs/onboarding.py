@@ -217,15 +217,15 @@ class OnboardingModal(discord.ui.Modal):
             required=True,
         )
         self.first_name = discord.ui.TextInput(
-            label="Prénom (confidentiel, staff uniquement)",
-            placeholder="Usage interne PADS uniquement, visible seulement par le staff",
+            label="Prénom utilisé sur Le Mans Ultimate",
+            placeholder="Confidentiel : visible uniquement par le staff PADS",
             min_length=1,
             max_length=NAME_MAX,
             required=True,
         )
         self.last_name = discord.ui.TextInput(
-            label="Nom (apparaîtra dans ton pseudo)",
-            placeholder="Usage interne PADS ; seuls l'initiale du prénom et le nom sont affichés",
+            label="Nom utilisé sur Le Mans Ultimate",
+            placeholder="Affiché dans ton pseudo : Pseudo[P.Nom]",
             min_length=1,
             max_length=NAME_MAX,
             required=True,
@@ -378,6 +378,7 @@ class Onboarding(commands.Cog):
             value=(
                 "Lis le règlement puis clique sur **J'accepte le règlement**. "
                 "Un formulaire te demandera ton pseudo, ton prénom et ton nom.\n"
+                "⚠️ Indique les **prénom et nom utilisés sur Le Mans Ultimate**.\n"
                 f"{NICKNAME_NOTICE}"
             ),
             inline=False,
