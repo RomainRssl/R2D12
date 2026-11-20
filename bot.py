@@ -59,6 +59,7 @@ class R2D12(commands.Bot):
         await self.load_extension("cogs.tournois")
         await self.load_extension("cogs.lmu_sync")
         await self.load_extension("cogs.onboarding")
+        await self.load_extension("cogs.role_masse")
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
