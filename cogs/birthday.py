@@ -315,7 +315,7 @@ class Birthday(commands.Cog):
         salon="Salon où publier les messages d'anniversaire",
         message="Message d'anniversaire. Variables : {mention} {name} {username} {server}",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def birthday_config(
         self,
         interaction: discord.Interaction,
@@ -337,7 +337,7 @@ class Birthday(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @birthday_group.command(name="mp-activer", description="Activer le MP automatique d'enregistrement à l'arrivée")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def birthday_dm_enable(self, interaction: discord.Interaction):
         data = load_data()
         get_guild(data, interaction.guild_id)["dm_enabled"] = True
@@ -348,7 +348,7 @@ class Birthday(commands.Cog):
         )
 
     @birthday_group.command(name="mp-desactiver", description="Désactiver le MP automatique à l'arrivée")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def birthday_dm_disable(self, interaction: discord.Interaction):
         data = load_data()
         get_guild(data, interaction.guild_id)["dm_enabled"] = False
@@ -362,7 +362,7 @@ class Birthday(commands.Cog):
     @app_commands.describe(
         fichier="Fichier CSV avec colonnes : user_id,jour,mois (une ligne par membre)"
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def birthday_import(self, interaction: discord.Interaction, fichier: discord.Attachment):
         if not fichier.filename.endswith(".csv"):
             await interaction.response.send_message("Le fichier doit être au format `.csv`.", ephemeral=True)
@@ -456,7 +456,7 @@ class Birthday(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @birthday_group.command(name="tester-mp", description="Simuler le MP de bienvenue d'anniversaire")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def birthday_test_dm(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title=f"Bienvenue sur {interaction.guild.name} !",

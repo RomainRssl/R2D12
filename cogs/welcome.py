@@ -75,7 +75,7 @@ class Welcome(commands.Cog):
             "Variables : {mention} {name} {username} {server} {count}"
         ),
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def welcome_set(
         self,
         interaction: discord.Interaction,
@@ -134,7 +134,7 @@ class Welcome(commands.Cog):
         )
 
     @welcome_group.command(name="desactiver", description="Désactiver les messages de bienvenue")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def welcome_disable(self, interaction: discord.Interaction):
         data = load_welcome()
         guild_key = str(interaction.guild_id)

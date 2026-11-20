@@ -87,7 +87,7 @@ class ReactionRoles(commands.Cog):
 
     @rolerole_group.command(name="creer", description="Créer un panneau de rôles réactions")
     @app_commands.describe(salon="Salon où envoyer le panneau", titre="Titre du panneau", description="Description du panneau")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def rr_create(self, interaction: discord.Interaction, salon: discord.TextChannel, titre: str, description: str):
         embed = discord.Embed(title=titre, description=description, color=discord.Color.blurple())
         embed.set_footer(text="Cliquez sur un bouton pour obtenir ou retirer un rôle.")
@@ -108,7 +108,7 @@ class ReactionRoles(commands.Cog):
 
     @rolerole_group.command(name="ajouter", description="Ajouter un bouton de rôle à un panneau existant")
     @app_commands.describe(message_id="ID du message panneau", role="Rôle à attribuer", label="Texte du bouton", emoji="Emoji du bouton (optionnel)")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def rr_add(self, interaction: discord.Interaction, message_id: str, role: discord.Role, label: str, emoji: str = None):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -137,7 +137,7 @@ class ReactionRoles(commands.Cog):
 
     @rolerole_group.command(name="supprimer", description="Supprimer un panneau de rôles réactions")
     @app_commands.describe(message_id="ID du message panneau à supprimer")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def rr_delete(self, interaction: discord.Interaction, message_id: str):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -166,7 +166,7 @@ class ReactionRoles(commands.Cog):
         emoji="L'emoji à surveiller (ex: 👍 ou :nom:)",
         role="Rôle à attribuer / retirer",
     )
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def er_add(self, interaction: discord.Interaction, message_id: str, emoji: str, role: discord.Role):
         if not message_id.isdigit():
             await interaction.response.send_message("L'ID du message doit être un nombre.", ephemeral=True)
@@ -216,7 +216,7 @@ class ReactionRoles(commands.Cog):
         message_id="ID du message",
         emoji="L'emoji à dissocier",
     )
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def er_remove(self, interaction: discord.Interaction, message_id: str, emoji: str):
         emoji = emoji.strip()
         data = load_er()
@@ -235,7 +235,7 @@ class ReactionRoles(commands.Cog):
         await interaction.response.send_message(f"Association {emoji} supprimée du message `{message_id}`.", ephemeral=True)
 
     @emojirole_group.command(name="liste", description="Voir toutes les associations emoji → rôle")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def er_list(self, interaction: discord.Interaction):
         data = load_er()
         guild_entries = data.get(str(interaction.guild_id), {})

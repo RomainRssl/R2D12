@@ -97,7 +97,7 @@ class Suggestions(commands.Cog):
 
     @suggestion_group.command(name="configurer", description="Définir le salon des suggestions")
     @app_commands.describe(salon="Salon où envoyer les suggestions")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def suggestion_config(self, interaction: discord.Interaction, salon: discord.TextChannel):
         data = load_data()
         data.setdefault(str(interaction.guild_id), {})["channel_id"] = salon.id
@@ -141,13 +141,13 @@ class Suggestions(commands.Cog):
 
     @suggestion_group.command(name="accepter", description="Accepter une suggestion")
     @app_commands.describe(message_id="ID du message de la suggestion", commentaire="Commentaire optionnel")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def suggestion_accept(self, interaction: discord.Interaction, message_id: str, commentaire: str = None):
         await self._update_suggestion(interaction, message_id, "acceptée", commentaire)
 
     @suggestion_group.command(name="refuser", description="Refuser une suggestion")
     @app_commands.describe(message_id="ID du message de la suggestion", commentaire="Commentaire optionnel")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def suggestion_refuse(self, interaction: discord.Interaction, message_id: str, commentaire: str = None):
         await self._update_suggestion(interaction, message_id, "refusée", commentaire)
 

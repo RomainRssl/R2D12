@@ -44,7 +44,7 @@ class AutoRoles(commands.Cog):
 
     @autorole_group.command(name="ajouter", description="Ajouter un rôle automatique à l'arrivée")
     @app_commands.describe(role="Le rôle à attribuer aux nouveaux membres")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def autorole_add(self, interaction: discord.Interaction, role: discord.Role):
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message("Je ne peux pas attribuer un rôle supérieur ou égal au mien.", ephemeral=True)
@@ -61,7 +61,7 @@ class AutoRoles(commands.Cog):
 
     @autorole_group.command(name="retirer", description="Retirer un rôle automatique")
     @app_commands.describe(role="Le rôle à retirer des auto-rôles")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def autorole_remove(self, interaction: discord.Interaction, role: discord.Role):
         data = load_data()
         guild_key = str(interaction.guild_id)

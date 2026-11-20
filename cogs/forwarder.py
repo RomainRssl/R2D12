@@ -117,7 +117,7 @@ class Forwarder(commands.Cog):
         destination="Salon de ce serveur où reposer les messages",
         afficher_source="Afficher une mention discrète du serveur source sous chaque message",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def relais_set(
         self,
         interaction: discord.Interaction,
@@ -183,7 +183,7 @@ class Forwarder(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @relais_group.command(name="liste", description="Voir tous les relais configurés")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def relais_list(self, interaction: discord.Interaction):
         data = load_data()
         relays = data.get(str(interaction.guild_id), [])
@@ -210,7 +210,7 @@ class Forwarder(commands.Cog):
 
     @relais_group.command(name="supprimer", description="Supprimer un relais")
     @app_commands.describe(numero="Numéro du relais (voir /relais liste)")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def relais_delete(self, interaction: discord.Interaction, numero: app_commands.Range[int, 1, 50]):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -230,7 +230,7 @@ class Forwarder(commands.Cog):
 
     @relais_group.command(name="tester", description="Envoyer un message de test dans la destination d'un relais")
     @app_commands.describe(numero="Numéro du relais à tester")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def relais_test(self, interaction: discord.Interaction, numero: app_commands.Range[int, 1, 50]):
         data = load_data()
         relays = data.get(str(interaction.guild_id), [])

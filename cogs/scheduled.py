@@ -76,7 +76,7 @@ class Scheduled(commands.Cog):
         message="Contenu du message",
         intervalle_heures="Intervalle en heures entre chaque envoi",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def scheduled_create(
         self, interaction: discord.Interaction,
         nom: str, salon: discord.TextChannel, message: str,
@@ -104,7 +104,7 @@ class Scheduled(commands.Cog):
 
     @planifie_group.command(name="supprimer", description="Supprimer un message récurrent")
     @app_commands.describe(nom="Nom du message planifié à supprimer")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def scheduled_delete(self, interaction: discord.Interaction, nom: str):
         nom = nom.lower().strip()
         data = load_data()
