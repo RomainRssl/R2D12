@@ -4,6 +4,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from cogs.onboarding import is_onboarding_active
+
 WELCOME_FILE = "data/welcome.json"
 
 DEFAULT_MESSAGE = (
@@ -48,6 +50,17 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
+        # Onboarding PADS actif : le message est envoyé après validation du
+        # règlement (événement « pads_member_verified »), pas à l'arrivée.
+        if is_onboarding_active(member.guild.id):
+            return
+        await self._send_welcome(member)
+
+    @commands.Cog.listener()
+    async def on_pads_member_verified(self, member: discord.Member):
+        await self._send_welcome(member)
+
+    async def _send_welcome(self, member: discord.Member):
         data = load_welcome()
         config = data.get(str(member.guild.id))
         if not config or not config.get("enabled", True):
@@ -65,7 +78,10 @@ class Welcome(commands.Cog):
             embed.set_thumbnail(url=member.display_avatar.url)
         embed.set_footer(text=f"{member.guild.name} • {member.guild.member_count} membres")
 
-        await channel.send(embed=embed)
+        try:
+            await channel.send(embed=embed)
+        except discord.HTTPException:
+            pass
 
     @welcome_group.command(name="configurer", description="Définir le salon et le message de bienvenue")
     @app_commands.describe(

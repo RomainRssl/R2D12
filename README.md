@@ -15,6 +15,7 @@ R2D12 est un bot Discord complet développé en Python avec la bibliothèque `di
    - [Général](#général)
    - [Modération](#modération)
    - [Templates & Annonces](#templates--annonces)
+   - [Onboarding PADS](#onboarding-pads)
    - [Bienvenue](#bienvenue)
    - [Anniversaires](#anniversaires)
    - [Logs d'audit](#logs-daudit)
@@ -263,6 +264,27 @@ Créez des messages pré-remplis avec des variables personnalisées.
 /template créer rappel "Rappel : {événement} aura lieu le {date} à {heure}."
 ```
 Lors de l'utilisation, un formulaire s'ouvre pour remplir `événement`, `date` et `heure`.
+
+---
+
+### Onboarding PADS
+
+Vérification des nouveaux membres : règlement + inscription (Pseudo, Prénom, Nom) envoyée au site PADS.
+
+**Parcours :** à l'arrivée le membre reçoit « Non vérifié » (il ne voit que #règlement) → il clique sur **J'accepte le règlement** → formulaire → le bot le renomme `Pseudo[P.Nom]` (ex. `Clyde[J.Doe]`), envoie les infos au site (`POST /api/members/onboarding`), retire « Non vérifié » et donne « Membre » (+ le rôle supplémentaire configuré, ex. PILOTE).
+
+| Commande (administrateurs) | Description |
+|---|---|
+| `/onboarding setup` | Rôles « Non vérifié », « Membre », rôle supplémentaire (ex. PILOTE), salon du règlement, version, salon staff |
+| `/onboarding reglement [fichier]` | Édite le texte du règlement (formulaire) ou le lit depuis un fichier `.md` |
+| `/onboarding publier` | Publie / met à jour le message du règlement avec le bouton |
+| `/onboarding statut` | Configuration + vérification des permissions et de la hiérarchie des rôles |
+| `/onboarding activer` / `desactiver` | Active / désactive l'onboarding |
+| `/onboarding migrer-existants` | Donne « Membre » à tous les membres humains actuels (sauf « Non vérifié ») |
+
+**Variables d'environnement :** `ONBOARDING_API_URL` (défaut : prod), `ONBOARDING_API_KEY` (même valeur que sur le site), `ONBOARDING_STAFF_LOG_CHANNEL_ID` (salon staff par défaut).
+
+> **Confidentialité :** le prénom et le nom ne sont transmis qu'au site. Ils ne sont jamais stockés par le bot, jamais écrits dans les logs et n'apparaissent que dans des messages éphémères. Quand l'onboarding est actif, le message de bienvenue (`/bienvenue`) est envoyé après la validation du règlement et non à l'arrivée.
 
 ---
 
@@ -680,6 +702,8 @@ R2D12/
 │   ├── moderation.py       # Modération
 │   ├── templates.py        # Templates & annonces
 │   ├── welcome.py          # Messages de bienvenue
+│   ├── onboarding.py       # Onboarding PADS (règlement + inscription)
+│   ├── onboarding_utils.py # Fonctions pures de l'onboarding (testées)
 │   ├── birthday.py         # Système d'anniversaires
 │   ├── logs.py             # Logs d'audit
 │   ├── autoroles.py        # Rôles automatiques
@@ -697,6 +721,7 @@ R2D12/
 │   ├── laptimes.py         # Temps au tour SimRacing
 │   ├── sessions.py         # Sessions SimRacing
 │   └── championship.py     # Championnats SimRacing
+├── tests/                  # Tests unitaires (python -m unittest discover -s tests -t .)
 └── data/                   # Données persistantes (créé automatiquement)
     ├── warnings.json
     ├── logs.json
@@ -717,6 +742,7 @@ R2D12/
     ├── sessions.json
     ├── birthday.json
     ├── welcome.json
+    ├── onboarding.json
     └── championship.json
 ```
 
