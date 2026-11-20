@@ -190,7 +190,7 @@ class Levels(commands.Cog):
 
     @niveau_group.command(name="configurer", description="Définir le salon des annonces de level up")
     @app_commands.describe(salon="Salon pour les messages de level up (aucun = salon du message)")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def niveau_config(self, interaction: discord.Interaction, salon: discord.TextChannel):
         data = load_data()
         data.setdefault(str(interaction.guild_id), {"channel_id": None, "rewards": {}, "members": {}})["channel_id"] = salon.id
@@ -199,7 +199,7 @@ class Levels(commands.Cog):
 
     @niveau_group.command(name="recompense-ajouter", description="Ajouter un rôle récompense à un niveau")
     @app_commands.describe(niveau="Niveau déclencheur", role="Rôle à attribuer")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def reward_add(self, interaction: discord.Interaction, niveau: app_commands.Range[int, 1, 500], role: discord.Role):
         data = load_data()
         guild_data = data.setdefault(str(interaction.guild_id), {"channel_id": None, "rewards": {}, "members": {}})
@@ -209,7 +209,7 @@ class Levels(commands.Cog):
 
     @niveau_group.command(name="recompense-retirer", description="Retirer une récompense de niveau")
     @app_commands.describe(niveau="Niveau dont retirer la récompense")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def reward_remove(self, interaction: discord.Interaction, niveau: int):
         data = load_data()
         rewards = data.get(str(interaction.guild_id), {}).get("rewards", {})

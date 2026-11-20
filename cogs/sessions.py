@@ -242,7 +242,7 @@ class Sessions(commands.Cog):
 
     @session_group.command(name="configurer", description="Définir le salon d'annonces des sessions (rappels)")
     @app_commands.describe(salon="Salon où envoyer les rappels de sessions")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def session_config(self, interaction: discord.Interaction, salon: discord.TextChannel):
         data = load_data()
         data.setdefault(str(interaction.guild_id), {"announce_channel_id": None, "sessions": {}})["announce_channel_id"] = salon.id

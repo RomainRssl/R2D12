@@ -90,7 +90,7 @@ class Templates(commands.Cog):
         nom="Nom du template (ex: bienvenue)",
         message="Contenu du template. Utilisez {variable} pour les trous (ex: Bonjour {prénom} !)",
     )
-    @app_commands.default_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True)
     async def template_create(self, interaction: discord.Interaction, nom: str, message: str):
         nom = nom.lower().strip()
         data = load_templates()
@@ -172,7 +172,7 @@ class Templates(commands.Cog):
 
     @template_group.command(name="supprimer", description="Supprimer un template")
     @app_commands.describe(nom="Nom du template à supprimer")
-    @app_commands.default_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True)
     async def template_delete(self, interaction: discord.Interaction, nom: str):
         nom = nom.lower().strip()
         data = load_templates()

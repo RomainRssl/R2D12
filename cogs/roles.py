@@ -59,7 +59,7 @@ class Roles(commands.Cog):
         mentionnable="Le rôle peut être mentionné par tous",
         affiche_separe="Afficher le rôle séparément dans la liste des membres",
     )
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_create(
         self,
         interaction: discord.Interaction,
@@ -103,7 +103,7 @@ class Roles(commands.Cog):
 
     @role_group.command(name="supprimer", description="Supprimer un rôle du serveur")
     @app_commands.describe(role="Le rôle à supprimer")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_delete(self, interaction: discord.Interaction, role: discord.Role):
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(
@@ -133,7 +133,7 @@ class Roles(commands.Cog):
         mentionnable="Modifier si le rôle peut être mentionné",
         affiche_separe="Modifier l'affichage séparé dans la liste des membres",
     )
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_edit(
         self,
         interaction: discord.Interaction,
@@ -191,7 +191,7 @@ class Roles(commands.Cog):
 
     @role_group.command(name="permissions-voir", description="Voir les permissions d'un rôle")
     @app_commands.describe(role="Le rôle dont voir les permissions")
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_perms_view(self, interaction: discord.Interaction, role: discord.Role):
         perms = role.permissions
         granted = []
@@ -216,7 +216,7 @@ class Roles(commands.Cog):
     @role_group.command(name="permissions-ajouter", description="Accorder une permission à un rôle")
     @app_commands.describe(role="Le rôle à modifier", permission="La permission à accorder")
     @app_commands.choices(permission=PERMISSIONS_LIST)
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_perms_add(self, interaction: discord.Interaction, role: discord.Role, permission: str):
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(
@@ -244,7 +244,7 @@ class Roles(commands.Cog):
     @role_group.command(name="permissions-retirer", description="Retirer une permission d'un rôle")
     @app_commands.describe(role="Le rôle à modifier", permission="La permission à retirer")
     @app_commands.choices(permission=PERMISSIONS_LIST)
-    @app_commands.default_permissions(manage_roles=True)
+    @app_commands.checks.has_permissions(manage_roles=True)
     async def role_perms_remove(self, interaction: discord.Interaction, role: discord.Role, permission: str):
         if role >= interaction.guild.me.top_role:
             await interaction.response.send_message(

@@ -216,7 +216,7 @@ class Tickets(commands.Cog):
         categorie="Catégorie Discord où créer les salons de ticket",
         role_support="Rôle de l'équipe support (optionnel)",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_config(
         self,
         interaction: discord.Interaction,
@@ -244,7 +244,7 @@ class Tickets(commands.Cog):
         description="Sous-titre affiché dans le menu (optionnel)",
         message_auto="Message automatique envoyé à l'ouverture (optionnel)",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_cat_add(
         self,
         interaction: discord.Interaction,
@@ -276,7 +276,7 @@ class Tickets(commands.Cog):
 
     @ticket_group.command(name="categorie_supprimer", description="Supprimer une catégorie de ticket")
     @app_commands.describe(identifiant="Identifiant de la catégorie à supprimer")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_cat_remove(self, interaction: discord.Interaction, identifiant: str):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -292,7 +292,7 @@ class Tickets(commands.Cog):
         await interaction.response.send_message(f"Catégorie **{label}** supprimée.", ephemeral=True)
 
     @ticket_group.command(name="categories_liste", description="Lister les catégories de ticket configurées")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_cat_list(self, interaction: discord.Interaction):
         config = get_config(interaction.guild_id)
         cats = config.get("categories", {})
@@ -316,7 +316,7 @@ class Tickets(commands.Cog):
         titre="Titre de l'embed (optionnel)",
         message="Message d'invitation (optionnel)",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def ticket_panel(
         self,
         interaction: discord.Interaction,
@@ -364,7 +364,7 @@ class Tickets(commands.Cog):
 
     @ticket_group.command(name="ajouter", description="Ajouter un membre au ticket actuel")
     @app_commands.describe(membre="Membre à ajouter")
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def ticket_add(self, interaction: discord.Interaction, membre: discord.Member):
         data = load_data()
         ticket = data.get(str(interaction.guild_id), {}).get("tickets", {}).get(str(interaction.channel_id))

@@ -171,7 +171,7 @@ class Economy(commands.Cog):
 
     @boutique_group.command(name="ajouter", description="Ajouter un article à la boutique")
     @app_commands.describe(nom="Nom de l'article", prix="Prix en monnaie", description="Description", role="Rôle attribué à l'achat (optionnel)")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def shop_add(self, interaction: discord.Interaction, nom: str, prix: app_commands.Range[int, 1, 10000000], description: str, role: discord.Role = None):
         data = load_data()
         guild_data = get_guild(data, interaction.guild_id)
@@ -184,7 +184,7 @@ class Economy(commands.Cog):
 
     @boutique_group.command(name="retirer", description="Retirer un article de la boutique")
     @app_commands.describe(nom="Nom de l'article à retirer")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def shop_remove(self, interaction: discord.Interaction, nom: str):
         data = load_data()
         guild_data = get_guild(data, interaction.guild_id)

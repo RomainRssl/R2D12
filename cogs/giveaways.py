@@ -136,7 +136,7 @@ class Giveaways(commands.Cog):
         salon="Salon du giveaway", duree_heures="Durée en heures",
         prix="Ce que l'on peut gagner", gagnants="Nombre de gagnants (défaut : 1)",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def giveaway_start(
         self, interaction: discord.Interaction,
         salon: discord.TextChannel,
@@ -169,7 +169,7 @@ class Giveaways(commands.Cog):
 
     @giveaway_group.command(name="terminer", description="Terminer un giveaway manuellement")
     @app_commands.describe(message_id="ID du message du giveaway")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def giveaway_end(self, interaction: discord.Interaction, message_id: str):
         data = load_data()
         gw = data.get(str(interaction.guild_id), {}).get(message_id)
@@ -196,7 +196,7 @@ class Giveaways(commands.Cog):
 
     @giveaway_group.command(name="relancer", description="Re-tirer au sort les gagnants d'un giveaway terminé")
     @app_commands.describe(message_id="ID du message du giveaway")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def giveaway_reroll(self, interaction: discord.Interaction, message_id: str):
         data = load_data()
         gw = data.get(str(interaction.guild_id), {}).get(message_id)

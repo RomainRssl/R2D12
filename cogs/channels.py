@@ -26,7 +26,7 @@ class Channels(commands.Cog):
         app_commands.Choice(name="Textuel", value="texte"),
         app_commands.Choice(name="Vocal",   value="vocal"),
     ])
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def channel_create(
         self,
         interaction: discord.Interaction,
@@ -88,7 +88,7 @@ class Channels(commands.Cog):
         ralentissement="Délai entre messages en secondes (0 = désactivé, texte uniquement)",
         prive="Rendre visible ou invisible pour @everyone",
     )
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def channel_edit(
         self,
         interaction: discord.Interaction,
@@ -158,7 +158,7 @@ class Channels(commands.Cog):
 
     @salon_group.command(name="supprimer", description="Supprimer un salon")
     @app_commands.describe(salon="Le salon à supprimer", raison="Raison de la suppression (optionnel)")
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def channel_delete(
         self,
         interaction: discord.Interaction,

@@ -1,6 +1,7 @@
 import logging
 import os
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -25,6 +26,7 @@ class R2D12(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
+        self.tree.on_error = self.on_app_command_error
         await self.load_extension("cogs.general")
         await self.load_extension("cogs.moderation")
         await self.load_extension("cogs.templates")
@@ -65,6 +67,28 @@ class R2D12(commands.Bot):
         else:
             synced = await self.tree.sync()
             print(f"Slash commands synchronisées globalement : {[c.name for c in synced]}", flush=True)
+
+    async def on_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Réponse éphémère quand une vérification de permission échoue."""
+        if isinstance(error, app_commands.MissingPermissions):
+            msg = "⛔ Tu n'as pas les permissions nécessaires pour utiliser cette commande."
+        elif isinstance(error, (app_commands.MissingRole, app_commands.MissingAnyRole)):
+            msg = "⛔ Cette commande est réservée à un rôle que tu n'as pas."
+        elif isinstance(error, app_commands.NoPrivateMessage):
+            msg = "Cette commande ne fonctionne que sur un serveur."
+        elif isinstance(error, app_commands.CheckFailure):
+            msg = "⛔ Tu ne peux pas utiliser cette commande."
+        else:
+            name = interaction.command.qualified_name if interaction.command else "?"
+            logging.getLogger("r2d12").error("Erreur dans /%s", name, exc_info=error)
+            msg = "❌ Une erreur est survenue pendant l'exécution de la commande."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+        except discord.HTTPException:
+            pass
 
     async def on_ready(self):
         print(f"R2D12 est en ligne ! Connecté en tant que {self.user} (ID: {self.user.id})")

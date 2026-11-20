@@ -89,7 +89,7 @@ class Counters(commands.Cog):
         app_commands.Choice(name="Salons", value="salons"),
         app_commands.Choice(name="Boosts", value="boosts"),
     ])
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def counter_create(self, interaction: discord.Interaction, type: str):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -120,7 +120,7 @@ class Counters(commands.Cog):
         app_commands.Choice(name="Salons", value="salons"),
         app_commands.Choice(name="Boosts", value="boosts"),
     ])
-    @app_commands.default_permissions(manage_channels=True)
+    @app_commands.checks.has_permissions(manage_channels=True)
     async def counter_delete(self, interaction: discord.Interaction, type: str):
         data = load_data()
         guild_key = str(interaction.guild_id)

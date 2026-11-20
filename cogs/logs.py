@@ -40,7 +40,7 @@ class Logs(commands.Cog):
 
     @logs_group.command(name="configurer", description="Définir le salon des logs")
     @app_commands.describe(salon="Salon où envoyer les logs")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def logs_set(self, interaction: discord.Interaction, salon: discord.TextChannel):
         data = load_logs()
         data[str(interaction.guild_id)] = {"channel_id": salon.id, "enabled": True}
@@ -51,7 +51,7 @@ class Logs(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @logs_group.command(name="desactiver", description="Désactiver les logs")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def logs_disable(self, interaction: discord.Interaction):
         data = load_logs()
         if str(interaction.guild_id) not in data:

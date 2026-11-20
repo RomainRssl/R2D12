@@ -112,7 +112,7 @@ class WordReplace(commands.Cog):
         mot="Le mot ou l'expression à remplacer (insensible à la casse)",
         remplacement="Ce par quoi le remplacer",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_add(self, interaction: discord.Interaction, mot: str, remplacement: str):
         mot = mot.strip().lower()
         remplacement = remplacement.strip()
@@ -133,7 +133,7 @@ class WordReplace(commands.Cog):
 
     @remplacer_group.command(name="retirer", description="Supprimer une règle de remplacement")
     @app_commands.describe(mot="Le mot dont vous souhaitez retirer la règle")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_remove(self, interaction: discord.Interaction, mot: str):
         mot = mot.strip().lower()
         data = load_data()
@@ -147,7 +147,7 @@ class WordReplace(commands.Cog):
         await interaction.response.send_message(f"Règle pour `{mot}` supprimée.", ephemeral=True)
 
     @remplacer_group.command(name="liste", description="Voir toutes les règles de remplacement")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_list(self, interaction: discord.Interaction):
         data = load_data()
         guild_cfg = data.get(str(interaction.guild_id), {})
@@ -182,7 +182,7 @@ class WordReplace(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @remplacer_group.command(name="activer", description="Activer le remplacement automatique")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_enable(self, interaction: discord.Interaction):
         data = load_data()
         data.setdefault(str(interaction.guild_id), {"enabled": True, "rules": {}})["enabled"] = True
@@ -190,7 +190,7 @@ class WordReplace(commands.Cog):
         await interaction.response.send_message("✅ Remplacement automatique **activé**.", ephemeral=True)
 
     @remplacer_group.command(name="desactiver", description="Désactiver le remplacement automatique")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_disable(self, interaction: discord.Interaction):
         data = load_data()
         data.setdefault(str(interaction.guild_id), {"enabled": True, "rules": {}})["enabled"] = False
@@ -199,7 +199,7 @@ class WordReplace(commands.Cog):
 
     @remplacer_group.command(name="tester", description="Tester une phrase avec les règles actives")
     @app_commands.describe(phrase="La phrase à tester")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def wr_test(self, interaction: discord.Interaction, phrase: str):
         data = load_data()
         rules = data.get(str(interaction.guild_id), {}).get("rules", {})

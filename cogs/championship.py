@@ -85,7 +85,7 @@ class Championship(commands.Cog):
         app_commands.Choice(name="Simple (10-8-6-5-4-3-2-1)", value="simple"),
         app_commands.Choice(name="Égal (1 point par finissant)", value="égal"),
     ])
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def champ_create(
         self, interaction: discord.Interaction,
         nom: str, points_system: str = "f1", description: str = None,
@@ -161,7 +161,7 @@ class Championship(commands.Cog):
         nom="Nom du championnat",
         manche="Nom ou numéro de la manche (ex: Manche 3 — Monza)",
     )
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def champ_result(self, interaction: discord.Interaction, nom: str, manche: str):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -212,7 +212,7 @@ class Championship(commands.Cog):
 
     @champ_group.command(name="supprimer", description="Supprimer un championnat")
     @app_commands.describe(nom="Nom du championnat à supprimer")
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def champ_delete(self, interaction: discord.Interaction, nom: str):
         data = load_data()
         guild_key = str(interaction.guild_id)
@@ -267,7 +267,7 @@ class Championship(commands.Cog):
         app_commands.Choice(name="Disqualification", value="Disqualification"),
         app_commands.Choice(name="Exclusion de course", value="Exclusion"),
     ])
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
     async def penalty_apply(
         self, interaction: discord.Interaction,
         pilote: discord.Member, type: str, raison: str,
