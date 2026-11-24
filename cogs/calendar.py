@@ -154,14 +154,28 @@ def _load_msgs() -> dict:
 def _find_api_race(api_races: list, data: dict) -> dict | None:
     """Retrouve la course API correspondant à une entrée sauvegardée.
 
-    Correspondance par date, départagée par le titre si plusieurs courses
-    partagent le même horaire."""
+    Correspondance prioritaire par date exacte, puis par titre seul comme
+    fallback (utile quand l'horaire a changé sur le site)."""
+    # 1. Correspondance exacte sur la date
     candidates = [r for r in api_races if r["date"] == data.get("date")]
+    if len(candidates) == 1:
+        return candidates[0]
     if len(candidates) > 1:
         by_title = next((r for r in candidates if r["title"] == data.get("title")), None)
         if by_title:
             return by_title
-    return candidates[0] if candidates else None
+        return candidates[0]
+    # 2. Fallback : correspondance par titre seul (date modifiée sur le site)
+    by_title = next((r for r in api_races if r["title"] == data.get("title")), None)
+    if by_title:
+        return by_title
+    # 3. Fallback : correspondance par date tronquée au jour (même jour, titres différents)
+    stored_day = (data.get("date") or "")[:10]
+    if stored_day:
+        day_candidates = [r for r in api_races if r["date"][:10] == stored_day]
+        if len(day_candidates) == 1:
+            return day_candidates[0]
+    return None
 
 
 _CLASS_COLORS: dict[str, int] = {
