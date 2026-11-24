@@ -154,14 +154,28 @@ def _load_msgs() -> dict:
 def _find_api_race(api_races: list, data: dict) -> dict | None:
     """Retrouve la course API correspondant à une entrée sauvegardée.
 
-    Correspondance par date, départagée par le titre si plusieurs courses
-    partagent le même horaire."""
+    Correspondance prioritaire par date exacte, puis par titre seul comme
+    fallback (utile quand l'horaire a changé sur le site)."""
+    # 1. Correspondance exacte sur la date
     candidates = [r for r in api_races if r["date"] == data.get("date")]
+    if len(candidates) == 1:
+        return candidates[0]
     if len(candidates) > 1:
         by_title = next((r for r in candidates if r["title"] == data.get("title")), None)
         if by_title:
             return by_title
-    return candidates[0] if candidates else None
+        return candidates[0]
+    # 2. Fallback : correspondance par titre seul (date modifiée sur le site)
+    by_title = next((r for r in api_races if r["title"] == data.get("title")), None)
+    if by_title:
+        return by_title
+    # 3. Fallback : correspondance par date tronquée au jour (même jour, titres différents)
+    stored_day = (data.get("date") or "")[:10]
+    if stored_day:
+        day_candidates = [r for r in api_races if r["date"][:10] == stored_day]
+        if len(day_candidates) == 1:
+            return day_candidates[0]
+    return None
 
 
 _CLASS_COLORS: dict[str, int] = {
@@ -974,6 +988,33 @@ class Calendar(commands.Cog):
             f"✅ {sent} message(s) envoyé(s){f', {skipped} ignoré(s) (pas de données)' if skipped else ''}.",
             ephemeral=True,
         )
+
+    @discord.app_commands.command(
+        name="refresh_course_debug",
+        description="Affiche les titres/dates stockés vs API pour diagnostiquer /refresh_course",
+    )
+    async def course_refresh_debug(self, interaction: discord.Interaction):
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        races_api = await self._fetch_races_api()
+        messages = _load_msgs()
+
+        lines = [f"**API** ({len(races_api)} courses) :"]
+        for r in races_api:
+            lines.append(f"  • `{r['title']}` | `{r['date']}`")
+
+        lines.append(f"\n**Stockées** ({len(messages)} entrées) :")
+        for msg_id, data in list(messages.items())[:20]:
+            match = _find_api_race(races_api, data)
+            status = "✅" if match else "❌"
+            lines.append(f"  {status} `{data.get('title')}` | `{data.get('date')}`")
+        if len(messages) > 20:
+            lines.append(f"  … et {len(messages) - 20} autres")
+
+        await interaction.followup.send("\n".join(lines)[:1990], ephemeral=True)
 
     @discord.app_commands.command(
         name="refresh_course",
