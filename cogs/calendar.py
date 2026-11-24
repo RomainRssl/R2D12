@@ -990,6 +990,33 @@ class Calendar(commands.Cog):
         )
 
     @discord.app_commands.command(
+        name="refresh_course_debug",
+        description="Affiche les titres/dates stockés vs API pour diagnostiquer /refresh_course",
+    )
+    async def course_refresh_debug(self, interaction: discord.Interaction):
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message("Commande réservée aux administrateurs.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        races_api = await self._fetch_races_api()
+        messages = _load_msgs()
+
+        lines = [f"**API** ({len(races_api)} courses) :"]
+        for r in races_api:
+            lines.append(f"  • `{r['title']}` | `{r['date']}`")
+
+        lines.append(f"\n**Stockées** ({len(messages)} entrées) :")
+        for msg_id, data in list(messages.items())[:20]:
+            match = _find_api_race(races_api, data)
+            status = "✅" if match else "❌"
+            lines.append(f"  {status} `{data.get('title')}` | `{data.get('date')}`")
+        if len(messages) > 20:
+            lines.append(f"  … et {len(messages) - 20} autres")
+
+        await interaction.followup.send("\n".join(lines)[:1990], ephemeral=True)
+
+    @discord.app_commands.command(
         name="refresh_course",
         description="Met à jour les embeds des courses annoncées avec les données actuelles de l'API",
     )
