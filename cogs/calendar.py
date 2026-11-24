@@ -976,6 +976,75 @@ class Calendar(commands.Cog):
         )
 
     @discord.app_commands.command(
+        name="refresh_course",
+        description="Met à jour les embeds des courses annoncées avec les données actuelles de l'API",
+    )
+    async def course_refresh(self, interaction: discord.Interaction):
+        if not self._is_admin(interaction.user):
+            await interaction.response.send_message(
+                "Commande réservée aux administrateurs.", ephemeral=True
+            )
+            return
+        await interaction.response.defer(ephemeral=True)
+
+        races_api = await self._fetch_races_api()
+        messages = _load_msgs()
+        updated = 0
+        skipped = 0
+
+        try:
+            main_channel = await self.bot.fetch_channel(RACES_CHANNEL_ID)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Impossible d'accéder au channel principal : {e}", ephemeral=True)
+            return
+
+        guild = main_channel.guild
+
+        for msg_id, data in messages.items():
+            race = _find_api_race(races_api, data)
+            if not race:
+                skipped += 1
+                continue
+
+            # Récupérer le nombre d'inscrits via le rôle
+            role = guild.get_role(data.get("role_id", 0))
+            inscrit_count = len(role.members) if role else 0
+
+            # Reconstruire l'embed avec les données fraîches
+            race_channel = None
+            if data.get("channel_id"):
+                race_channel = guild.get_channel(int(data["channel_id"]))
+
+            embed = self._build_embed(race, race_channel, inscrit_count=inscrit_count)
+            view = RaceRegistrationView(race["title"], data["role_id"])
+
+            # Mettre à jour le message d'annonce principal
+            try:
+                msg = await main_channel.fetch_message(int(msg_id))
+                await msg.edit(embed=embed, view=view)
+            except Exception as e:
+                logger.warning("refresh_course — impossible de mettre à jour msg %s : %s", msg_id, e)
+                skipped += 1
+                continue
+
+            # Mettre à jour l'embed dans le channel privé de la course
+            if data.get("channel_embed_msg_id") and data.get("channel_id"):
+                try:
+                    race_ch = guild.get_channel(int(data["channel_id"]))
+                    if race_ch:
+                        ch_msg = await race_ch.fetch_message(int(data["channel_embed_msg_id"]))
+                        await ch_msg.edit(embed=self._build_embed(race, inscrit_count=inscrit_count))
+                except Exception as e:
+                    logger.warning("refresh_course — impossible de mettre à jour channel privé pour '%s' : %s", data.get("title"), e)
+
+            updated += 1
+
+        await interaction.followup.send(
+            f"✅ {updated} course(s) mise(s) à jour{f', {skipped} ignorée(s) (introuvable dans l\'API ou message supprimé)' if skipped else ''}.",
+            ephemeral=True,
+        )
+
+    @discord.app_commands.command(
         name="courserestaurer",
         description="Reposte les messages de sélection de classe manquants dans les channels de course",
     )
