@@ -54,7 +54,11 @@ def _make_session() -> requests.Session:
         try:
             jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
             session.cookies.update(jar)
-            logger.info("Instagram: cookies chargés depuis %s (%d cookies)", IG_COOKIES_FILE, len(list(jar)))
+            # Extract csrftoken and add as header (required by Instagram API)
+            csrf = session.cookies.get("csrftoken", domain=".instagram.com") or session.cookies.get("csrftoken")
+            if csrf:
+                session.headers["X-CSRFToken"] = csrf
+            logger.info("Instagram: %d cookies chargés (csrf=%s)", len(list(jar)), bool(csrf))
         except Exception as e:
             logger.warning("Instagram: échec chargement cookies: %s", e)
     else:
@@ -64,13 +68,16 @@ def _make_session() -> requests.Session:
 
 def _fetch_posts(count: int) -> list[dict]:
     session = _make_session()
-    # Instagram internal API for profile posts
+    # Try Instagram internal API v1
     url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={INSTAGRAM_USERNAME}"
     try:
         resp = session.get(url, timeout=15)
         logger.info("Instagram API status: %s", resp.status_code)
+        if resp.status_code == 429:
+            logger.error("Instagram API: rate limit (429) — attendre quelques minutes")
+            return []
         if resp.status_code != 200:
-            logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:300])
+            logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:500])
             return []
         data = resp.json()
     except Exception as e:
