@@ -14,8 +14,13 @@ DATA_FILE = "data/instagram.json"
 INSTAGRAM_USERNAME = "paramourduspin_"
 CHANNEL_ID = 1575170929544270046
 POLL_INTERVAL_MINUTES = 15
-# How many past posts to backfill on first run (0 = only new posts going forward)
 BACKFILL_COUNT = 10
+
+# Credentials for authenticated scraping (required since Instagram blocked anon access)
+IG_LOGIN = os.getenv("INSTAGRAM_LOGIN")
+IG_PASSWORD = os.getenv("INSTAGRAM_PASSWORD")
+# Path to instaloader session file (alternative to password)
+IG_SESSION_FILE = os.getenv("INSTAGRAM_SESSION_FILE", "data/ig_session")
 
 
 def _load_data() -> dict:
@@ -31,8 +36,7 @@ def _save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def _fetch_posts(count: int) -> list[dict]:
-    """Fetch the most recent `count` posts from the public profile (blocking)."""
+def _make_loader() -> instaloader.Instaloader:
     loader = instaloader.Instaloader(
         download_pictures=False,
         download_videos=False,
@@ -43,6 +47,31 @@ def _fetch_posts(count: int) -> list[dict]:
         post_metadata_txt_pattern="",
         quiet=True,
     )
+    # Try session file first (persists across restarts without re-login)
+    if os.path.exists(IG_SESSION_FILE):
+        try:
+            loader.load_session_from_file(IG_LOGIN or INSTAGRAM_USERNAME, IG_SESSION_FILE)
+            logger.info("Instagram: session chargée depuis %s", IG_SESSION_FILE)
+            return loader
+        except Exception as e:
+            logger.warning("Instagram: échec chargement session: %s", e)
+    # Fall back to password login
+    if IG_LOGIN and IG_PASSWORD:
+        try:
+            loader.login(IG_LOGIN, IG_PASSWORD)
+            os.makedirs("data", exist_ok=True)
+            loader.save_session_to_file(IG_SESSION_FILE)
+            logger.info("Instagram: connecté en tant que %s, session sauvegardée", IG_LOGIN)
+        except Exception as e:
+            logger.error("Instagram: échec login: %s", e)
+    else:
+        logger.warning("Instagram: aucun login configuré, accès anonyme (peut échouer)")
+    return loader
+
+
+def _fetch_posts(count: int) -> list[dict]:
+    """Fetch the most recent `count` posts from the profile (blocking)."""
+    loader = _make_loader()
     try:
         profile = instaloader.Profile.from_username(loader.context, INSTAGRAM_USERNAME)
     except instaloader.exceptions.ProfileNotExistsException:
