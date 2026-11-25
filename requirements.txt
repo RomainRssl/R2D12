@@ -4,3 +4,4 @@ aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
 anthropic>=0.40.0
 instaloader>=4.10
+httpx[http2]>=0.27

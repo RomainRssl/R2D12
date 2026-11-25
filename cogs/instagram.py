@@ -3,7 +3,7 @@ import os
 import json
 import asyncio
 import datetime
-import requests
+import httpx
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -46,35 +46,38 @@ def _save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def _make_session() -> requests.Session:
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    if os.path.exists(IG_COOKIES_FILE):
-        jar = MozillaCookieJar()
-        try:
-            jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
-            session.cookies.update(jar)
-            # Extract csrftoken and add as header (required by Instagram API)
-            csrf = session.cookies.get("csrftoken", domain=".instagram.com") or session.cookies.get("csrftoken")
-            if csrf:
-                session.headers["X-CSRFToken"] = csrf
-            logger.info("Instagram: %d cookies chargés (csrf=%s)", len(list(jar)), bool(csrf))
-        except Exception as e:
-            logger.warning("Instagram: échec chargement cookies: %s", e)
-    else:
+def _load_cookies() -> tuple[dict, dict]:
+    """Returns (cookies_dict, headers_with_csrf)."""
+    cookies = {}
+    extra_headers = {}
+    if not os.path.exists(IG_COOKIES_FILE):
         logger.warning("Instagram: fichier cookies introuvable: %s", IG_COOKIES_FILE)
-    return session
+        return cookies, extra_headers
+    jar = MozillaCookieJar()
+    try:
+        jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+        for cookie in jar:
+            if "instagram.com" in cookie.domain:
+                cookies[cookie.name] = cookie.value
+        csrf = cookies.get("csrftoken", "")
+        if csrf:
+            extra_headers["X-CSRFToken"] = csrf
+        logger.info("Instagram: %d cookies instagram chargés (csrf=%s)", len(cookies), bool(csrf))
+    except Exception as e:
+        logger.warning("Instagram: échec chargement cookies: %s", e)
+    return cookies, extra_headers
 
 
 def _fetch_posts(count: int) -> list[dict]:
-    session = _make_session()
-    # Try Instagram internal API v1
+    cookies, extra_headers = _load_cookies()
+    headers = {**HEADERS, **extra_headers}
     url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={INSTAGRAM_USERNAME}"
     try:
-        resp = session.get(url, timeout=15)
+        with httpx.Client(http2=True, timeout=15, follow_redirects=True) as client:
+            resp = client.get(url, headers=headers, cookies=cookies)
         logger.info("Instagram API status: %s", resp.status_code)
         if resp.status_code == 429:
-            logger.error("Instagram API: rate limit (429) — attendre quelques minutes")
+            logger.error("Instagram API: rate limit (429)")
             return []
         if resp.status_code != 200:
             logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:500])
