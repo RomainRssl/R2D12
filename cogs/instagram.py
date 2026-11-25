@@ -60,11 +60,23 @@ def _make_loader() -> instaloader.Instaloader:
     # 2. Try browser cookies file (Netscape format exported from Chrome)
     if os.path.exists(IG_COOKIES_FILE):
         try:
-            jar = MozillaCookieJar()
-            jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
-            loader.context._session.cookies.update(jar)
-            logger.info("Instagram: cookies chargés depuis %s", IG_COOKIES_FILE)
-            return loader
+            session_id = None
+            with open(IG_COOKIES_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("#"):
+                        continue
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 7 and parts[5] == "sessionid":
+                        session_id = parts[6]
+                        break
+            if session_id:
+                loader.context._session.cookies.set(
+                    "sessionid", session_id, domain=".instagram.com"
+                )
+                logger.info("Instagram: sessionid chargé depuis %s", IG_COOKIES_FILE)
+                return loader
+            else:
+                logger.warning("Instagram: sessionid introuvable dans %s", IG_COOKIES_FILE)
         except Exception as e:
             logger.warning("Instagram: échec chargement cookies: %s", e)
     # 3. Fall back to password login
