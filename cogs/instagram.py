@@ -47,7 +47,7 @@ def _save_data(data: dict):
 
 
 def _load_cookies() -> tuple[dict, dict]:
-    """Returns (cookies_dict, headers_with_csrf)."""
+    """Returns (cookies_dict, extra_headers)."""
     cookies = {}
     extra_headers = {}
     if not os.path.exists(IG_COOKIES_FILE):
@@ -56,13 +56,13 @@ def _load_cookies() -> tuple[dict, dict]:
     jar = MozillaCookieJar()
     try:
         jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+        # Load ALL cookies (not just instagram.com filtered) so none are missed
         for cookie in jar:
-            if "instagram.com" in cookie.domain:
-                cookies[cookie.name] = cookie.value
+            cookies[cookie.name] = cookie.value
         csrf = cookies.get("csrftoken", "")
         if csrf:
             extra_headers["X-CSRFToken"] = csrf
-        logger.info("Instagram: %d cookies instagram chargés (csrf=%s)", len(cookies), bool(csrf))
+        logger.info("Instagram: %d cookies chargés (csrf=%s)", len(cookies), bool(csrf))
     except Exception as e:
         logger.warning("Instagram: échec chargement cookies: %s", e)
     return cookies, extra_headers
@@ -71,28 +71,33 @@ def _load_cookies() -> tuple[dict, dict]:
 def _fetch_posts(count: int) -> list[dict]:
     cookies, extra_headers = _load_cookies()
     headers = {**HEADERS, **extra_headers}
-    url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={INSTAGRAM_USERNAME}"
+    # Use ?__a=1 endpoint (simpler, works with valid session cookies)
+    url = f"https://www.instagram.com/{INSTAGRAM_USERNAME}/?__a=1&__d=dis"
     try:
         with httpx.Client(http2=True, timeout=15, follow_redirects=True) as client:
             resp = client.get(url, headers=headers, cookies=cookies)
-        logger.info("Instagram API status: %s", resp.status_code)
+        logger.info("Instagram API status: %s (url=%s)", resp.status_code, url)
         if resp.status_code == 429:
             logger.error("Instagram API: rate limit (429)")
             return []
         if resp.status_code != 200:
-            logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:500])
+            logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:300])
             return []
         data = resp.json()
     except Exception as e:
         logger.error("Instagram API: erreur requête: %s", e)
         return []
 
+    # Try both response structures (?__a=1 and web_profile_info)
     try:
-        edges = (
-            data["data"]["user"]["edge_owner_to_timeline_media"]["edges"]
-        )
-    except (KeyError, TypeError) as e:
-        logger.error("Instagram API: structure inattendue: %s | data=%s", e, str(data)[:300])
+        user = data.get("graphql", {}).get("user") or data.get("data", {}).get("user", {})
+        edges = user.get("edge_owner_to_timeline_media", {}).get("edges", [])
+    except (KeyError, TypeError, AttributeError) as e:
+        logger.error("Instagram API: structure inattendue: %s | keys=%s", e, list(data.keys()))
+        return []
+
+    if not edges:
+        logger.warning("Instagram API: aucun post trouvé. data keys=%s", list(data.keys()))
         return []
 
     posts = []
