@@ -1,32 +1,95 @@
 import logging
 import os
 import json
-import aiohttp
-import xml.etree.ElementTree as ET
-from discord.ext import commands, tasks
+import asyncio
+import datetime
+import instaloader
 import discord
+from discord import app_commands
+from discord.ext import commands, tasks
 
 logger = logging.getLogger("r2d12.instagram")
 
 DATA_FILE = "data/instagram.json"
 INSTAGRAM_USERNAME = "paramourduspin_"
 CHANNEL_ID = 1575170929544270046
-# RSS feed via rss.app — replace with your generated feed URL if needed
-RSS_URL = f"https://rss.app/feeds/_instagram_{INSTAGRAM_USERNAME}.xml"
 POLL_INTERVAL_MINUTES = 15
+# How many past posts to backfill on first run (0 = only new posts going forward)
+BACKFILL_COUNT = 10
 
 
 def _load_data() -> dict:
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return {"last_post_id": None}
+    return {"sent_shortcodes": []}
 
 
 def _save_data(data: dict):
     os.makedirs("data", exist_ok=True)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def _fetch_posts(count: int) -> list[dict]:
+    """Fetch the most recent `count` posts from the public profile (blocking)."""
+    loader = instaloader.Instaloader(
+        download_pictures=False,
+        download_videos=False,
+        download_video_thumbnails=False,
+        download_geotags=False,
+        download_comments=False,
+        save_metadata=False,
+        post_metadata_txt_pattern="",
+        quiet=True,
+    )
+    try:
+        profile = instaloader.Profile.from_username(loader.context, INSTAGRAM_USERNAME)
+    except instaloader.exceptions.ProfileNotExistsException:
+        logger.error("Profil Instagram introuvable: %s", INSTAGRAM_USERNAME)
+        return []
+    except Exception as e:
+        logger.error("Erreur chargement profil Instagram: %s", e)
+        return []
+
+    posts = []
+    try:
+        for post in profile.get_posts():
+            posts.append({
+                "shortcode": post.shortcode,
+                "url": f"https://www.instagram.com/p/{post.shortcode}/",
+                "caption": post.caption or "",
+                "image_url": post.url,
+                "timestamp": post.date_utc.isoformat(),
+                "is_video": post.is_video,
+                "typename": post.typename,
+            })
+            if len(posts) >= count:
+                break
+    except Exception as e:
+        logger.error("Erreur récupération posts Instagram: %s", e)
+
+    return posts
+
+
+def _build_embed(post: dict) -> discord.Embed:
+    caption = post["caption"][:2048] if post["caption"] else ""
+    embed = discord.Embed(
+        description=caption,
+        color=discord.Color.from_rgb(225, 48, 108),
+        url=post["url"],
+    )
+    embed.set_author(
+        name=f"@{INSTAGRAM_USERNAME}",
+        url=f"https://www.instagram.com/{INSTAGRAM_USERNAME}/",
+        icon_url="https://www.instagram.com/favicon.ico",
+    )
+    if post.get("image_url") and not post.get("is_video"):
+        embed.set_image(url=post["image_url"])
+    ts = datetime.datetime.fromisoformat(post["timestamp"])
+    embed.timestamp = ts
+    embed.set_footer(text="Instagram")
+    return embed
 
 
 class Instagram(commands.Cog):
@@ -39,6 +102,23 @@ class Instagram(commands.Cog):
     def cog_unload(self):
         self.poll_instagram.cancel()
 
+    async def _send_posts(self, channel: discord.TextChannel, posts: list[dict], data: dict):
+        """Send posts to channel and update data. posts should be oldest-first."""
+        sent = data.setdefault("sent_shortcodes", [])
+        for post in posts:
+            sc = post["shortcode"]
+            if sc in sent:
+                continue
+            embed = _build_embed(post)
+            try:
+                await channel.send(embed=embed)
+                sent.append(sc)
+                _save_data(data)
+                # Small delay to avoid rate limits
+                await asyncio.sleep(1)
+            except discord.HTTPException as e:
+                logger.error("Erreur envoi post Instagram %s: %s", sc, e)
+
     @tasks.loop(minutes=POLL_INTERVAL_MINUTES)
     async def poll_instagram(self):
         channel = self.bot.get_channel(CHANNEL_ID)
@@ -47,85 +127,53 @@ class Instagram(commands.Cog):
             return
 
         data = _load_data()
-        last_id = data.get("last_post_id")
+        is_first_run = not data.get("sent_shortcodes")
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(RSS_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        logger.warning("RSS Instagram: status %s", resp.status)
-                        return
-                    text = await resp.text()
-        except Exception as e:
-            logger.error("Erreur fetch RSS Instagram: %s", e)
+        fetch_count = BACKFILL_COUNT if is_first_run else 5
+        posts = await asyncio.get_event_loop().run_in_executor(
+            None, _fetch_posts, fetch_count
+        )
+        if not posts:
             return
 
-        try:
-            root = ET.fromstring(text)
-        except ET.ParseError as e:
-            logger.error("Erreur parsing RSS: %s", e)
-            return
+        # posts from instaloader are newest-first → reverse for chronological send
+        posts_to_send = list(reversed(posts))
 
-        ns = {"media": "http://search.yahoo.com/mrss/"}
-        items = root.findall(".//item")
-        if not items:
-            return
+        sent_before = len(data.get("sent_shortcodes", []))
+        await self._send_posts(channel, posts_to_send, data)
+        sent_after = len(data.get("sent_shortcodes", []))
 
-        # Find new posts (items newer than last seen)
-        new_items = []
-        for item in items:
-            guid = item.findtext("guid") or item.findtext("link")
-            if guid == last_id:
-                break
-            new_items.append(item)
-
-        if not new_items:
-            return
-
-        # Post from oldest to newest
-        new_items.reverse()
-        for item in new_items:
-            guid = item.findtext("guid") or item.findtext("link")
-            link = item.findtext("link") or ""
-            description = item.findtext("description") or ""
-            # Try to extract image from media:content or enclosure
-            image_url = None
-            media_content = item.find("media:content", ns)
-            if media_content is not None:
-                image_url = media_content.get("url")
-            if image_url is None:
-                enclosure = item.find("enclosure")
-                if enclosure is not None:
-                    image_url = enclosure.get("url")
-
-            embed = discord.Embed(
-                description=description[:2048] if description else "",
-                color=discord.Color.from_rgb(225, 48, 108),  # Instagram pink
-                url=link,
-            )
-            embed.set_author(
-                name=f"@{INSTAGRAM_USERNAME}",
-                url=f"https://www.instagram.com/{INSTAGRAM_USERNAME}/",
-                icon_url="https://www.instagram.com/favicon.ico",
-            )
-            if image_url:
-                embed.set_image(url=image_url)
-            embed.set_footer(text="Instagram")
-
-            try:
-                await channel.send(embed=embed)
-            except discord.HTTPException as e:
-                logger.error("Erreur envoi post Instagram: %s", e)
-
-        # Save most recent post id
-        newest_guid = items[0].findtext("guid") or items[0].findtext("link")
-        data["last_post_id"] = newest_guid
-        _save_data(data)
-        logger.info("Instagram: %d nouveau(x) post(s) envoyés", len(new_items))
+        new_count = sent_after - sent_before
+        if new_count:
+            logger.info("Instagram: %d nouveau(x) post(s) envoyés", new_count)
 
     @poll_instagram.before_loop
     async def before_poll(self):
         await self.bot.wait_until_ready()
+
+    # Admin command to manually trigger a backfill
+    @app_commands.command(name="instagram_sync", description="[Admin] Synchronise les derniers posts Instagram")
+    @app_commands.default_permissions(administrator=True)
+    async def instagram_sync(self, interaction: discord.Interaction, nombre: int = BACKFILL_COUNT):
+        await interaction.response.defer(ephemeral=True)
+        channel = self.bot.get_channel(CHANNEL_ID)
+        if channel is None:
+            await interaction.followup.send("❌ Channel Instagram introuvable.", ephemeral=True)
+            return
+
+        posts = await asyncio.get_event_loop().run_in_executor(None, _fetch_posts, nombre)
+        if not posts:
+            await interaction.followup.send("❌ Impossible de récupérer les posts Instagram.", ephemeral=True)
+            return
+
+        data = _load_data()
+        sent_before = len(data.get("sent_shortcodes", []))
+        await self._send_posts(channel, list(reversed(posts)), data)
+        sent_after = len(data.get("sent_shortcodes", []))
+        new_count = sent_after - sent_before
+        await interaction.followup.send(
+            f"✅ {new_count} nouveau(x) post(s) envoyé(s) sur {nombre} récupérés.", ephemeral=True
+        )
 
 
 async def setup(bot: commands.Bot):
