@@ -21,6 +21,7 @@ IG_LOGIN = os.getenv("INSTAGRAM_LOGIN")
 IG_PASSWORD = os.getenv("INSTAGRAM_PASSWORD")
 # Path to instaloader session file (alternative to password)
 IG_SESSION_FILE = os.getenv("INSTAGRAM_SESSION_FILE", "data/ig_session")
+IG_COOKIES_FILE = os.getenv("INSTAGRAM_COOKIES_FILE", "data/ig_cookies.txt")
 
 
 def _load_data() -> dict:
@@ -37,6 +38,7 @@ def _save_data(data: dict):
 
 
 def _make_loader() -> instaloader.Instaloader:
+    from http.cookiejar import MozillaCookieJar
     loader = instaloader.Instaloader(
         download_pictures=False,
         download_videos=False,
@@ -47,7 +49,7 @@ def _make_loader() -> instaloader.Instaloader:
         post_metadata_txt_pattern="",
         quiet=True,
     )
-    # Try session file first (persists across restarts without re-login)
+    # 1. Try instaloader session file
     if os.path.exists(IG_SESSION_FILE):
         try:
             loader.load_session_from_file(IG_LOGIN or INSTAGRAM_USERNAME, IG_SESSION_FILE)
@@ -55,7 +57,17 @@ def _make_loader() -> instaloader.Instaloader:
             return loader
         except Exception as e:
             logger.warning("Instagram: échec chargement session: %s", e)
-    # Fall back to password login
+    # 2. Try browser cookies file (Netscape format exported from Chrome)
+    if os.path.exists(IG_COOKIES_FILE):
+        try:
+            jar = MozillaCookieJar()
+            jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+            loader.context._session.cookies.update(jar)
+            logger.info("Instagram: cookies chargés depuis %s", IG_COOKIES_FILE)
+            return loader
+        except Exception as e:
+            logger.warning("Instagram: échec chargement cookies: %s", e)
+    # 3. Fall back to password login
     if IG_LOGIN and IG_PASSWORD:
         try:
             loader.login(IG_LOGIN, IG_PASSWORD)
@@ -65,7 +77,7 @@ def _make_loader() -> instaloader.Instaloader:
         except Exception as e:
             logger.error("Instagram: échec login: %s", e)
     else:
-        logger.warning("Instagram: aucun login configuré, accès anonyme (peut échouer)")
+        logger.warning("Instagram: aucun authentification configurée")
     return loader
 
 
