@@ -3,10 +3,11 @@ import os
 import json
 import asyncio
 import datetime
-import instaloader
+import requests
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
+from http.cookiejar import MozillaCookieJar
 
 logger = logging.getLogger("r2d12.instagram")
 
@@ -16,12 +17,20 @@ CHANNEL_ID = 1575170929544270046
 POLL_INTERVAL_MINUTES = 15
 BACKFILL_COUNT = 10
 
-# Credentials for authenticated scraping (required since Instagram blocked anon access)
-IG_LOGIN = os.getenv("INSTAGRAM_LOGIN")
-IG_PASSWORD = os.getenv("INSTAGRAM_PASSWORD")
-# Path to instaloader session file (alternative to password)
-IG_SESSION_FILE = os.getenv("INSTAGRAM_SESSION_FILE", "data/ig_session")
 IG_COOKIES_FILE = os.getenv("INSTAGRAM_COOKIES_FILE", "data/ig_cookies.txt")
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "*/*",
+    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "X-IG-App-ID": "936619743392459",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": f"https://www.instagram.com/{INSTAGRAM_USERNAME}/",
+}
 
 
 def _load_data() -> dict:
@@ -37,91 +46,62 @@ def _save_data(data: dict):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def _make_loader() -> instaloader.Instaloader:
-    from http.cookiejar import MozillaCookieJar
-    loader = instaloader.Instaloader(
-        download_pictures=False,
-        download_videos=False,
-        download_video_thumbnails=False,
-        download_geotags=False,
-        download_comments=False,
-        save_metadata=False,
-        post_metadata_txt_pattern="",
-        quiet=True,
-    )
-    # 1. Try instaloader session file
-    if os.path.exists(IG_SESSION_FILE):
-        try:
-            loader.load_session_from_file(IG_LOGIN or INSTAGRAM_USERNAME, IG_SESSION_FILE)
-            logger.info("Instagram: session chargée depuis %s", IG_SESSION_FILE)
-            return loader
-        except Exception as e:
-            logger.warning("Instagram: échec chargement session: %s", e)
-    # 2. Try browser cookies file (Netscape format exported from Chrome)
+def _make_session() -> requests.Session:
+    session = requests.Session()
+    session.headers.update(HEADERS)
     if os.path.exists(IG_COOKIES_FILE):
+        jar = MozillaCookieJar()
         try:
-            session_id = None
-            with open(IG_COOKIES_FILE, "r", encoding="utf-8") as f:
-                for line in f:
-                    if line.startswith("#"):
-                        continue
-                    parts = line.strip().split("\t")
-                    if len(parts) >= 7 and parts[5] == "sessionid":
-                        session_id = parts[6]
-                        break
-            if session_id:
-                loader.context._session.cookies.set(
-                    "sessionid", session_id, domain=".instagram.com"
-                )
-                logger.info("Instagram: sessionid chargé depuis %s", IG_COOKIES_FILE)
-                return loader
-            else:
-                logger.warning("Instagram: sessionid introuvable dans %s", IG_COOKIES_FILE)
+            jar.load(IG_COOKIES_FILE, ignore_discard=True, ignore_expires=True)
+            session.cookies.update(jar)
+            logger.info("Instagram: cookies chargés depuis %s (%d cookies)", IG_COOKIES_FILE, len(list(jar)))
         except Exception as e:
             logger.warning("Instagram: échec chargement cookies: %s", e)
-    # 3. Fall back to password login
-    if IG_LOGIN and IG_PASSWORD:
-        try:
-            loader.login(IG_LOGIN, IG_PASSWORD)
-            os.makedirs("data", exist_ok=True)
-            loader.save_session_to_file(IG_SESSION_FILE)
-            logger.info("Instagram: connecté en tant que %s, session sauvegardée", IG_LOGIN)
-        except Exception as e:
-            logger.error("Instagram: échec login: %s", e)
     else:
-        logger.warning("Instagram: aucun authentification configurée")
-    return loader
+        logger.warning("Instagram: fichier cookies introuvable: %s", IG_COOKIES_FILE)
+    return session
 
 
 def _fetch_posts(count: int) -> list[dict]:
-    """Fetch the most recent `count` posts from the profile (blocking)."""
-    loader = _make_loader()
+    session = _make_session()
+    # Instagram internal API for profile posts
+    url = f"https://www.instagram.com/api/v1/users/web_profile_info/?username={INSTAGRAM_USERNAME}"
     try:
-        profile = instaloader.Profile.from_username(loader.context, INSTAGRAM_USERNAME)
-    except instaloader.exceptions.ProfileNotExistsException:
-        logger.error("Profil Instagram introuvable: %s", INSTAGRAM_USERNAME)
-        return []
+        resp = session.get(url, timeout=15)
+        logger.info("Instagram API status: %s", resp.status_code)
+        if resp.status_code != 200:
+            logger.error("Instagram API: status %s, body: %s", resp.status_code, resp.text[:300])
+            return []
+        data = resp.json()
     except Exception as e:
-        logger.error("Erreur chargement profil Instagram: %s", e)
+        logger.error("Instagram API: erreur requête: %s", e)
+        return []
+
+    try:
+        edges = (
+            data["data"]["user"]["edge_owner_to_timeline_media"]["edges"]
+        )
+    except (KeyError, TypeError) as e:
+        logger.error("Instagram API: structure inattendue: %s | data=%s", e, str(data)[:300])
         return []
 
     posts = []
-    try:
-        for post in profile.get_posts():
-            posts.append({
-                "shortcode": post.shortcode,
-                "url": f"https://www.instagram.com/p/{post.shortcode}/",
-                "caption": post.caption or "",
-                "image_url": post.url,
-                "timestamp": post.date_utc.isoformat(),
-                "is_video": post.is_video,
-                "typename": post.typename,
-            })
-            if len(posts) >= count:
-                break
-    except Exception as e:
-        logger.error("Erreur récupération posts Instagram: %s", e)
-
+    for edge in edges[:count]:
+        node = edge.get("node", {})
+        shortcode = node.get("shortcode", "")
+        caption_edges = node.get("edge_media_to_caption", {}).get("edges", [])
+        caption = caption_edges[0]["node"]["text"] if caption_edges else ""
+        timestamp = node.get("taken_at_timestamp", 0)
+        is_video = node.get("is_video", False)
+        image_url = node.get("display_url", "")
+        posts.append({
+            "shortcode": shortcode,
+            "url": f"https://www.instagram.com/p/{shortcode}/",
+            "caption": caption,
+            "image_url": image_url,
+            "timestamp": datetime.datetime.utcfromtimestamp(timestamp).isoformat(),
+            "is_video": is_video,
+        })
     return posts
 
 
@@ -156,7 +136,6 @@ class Instagram(commands.Cog):
         self.poll_instagram.cancel()
 
     async def _send_posts(self, channel: discord.TextChannel, posts: list[dict], data: dict):
-        """Send posts to channel and update data. posts should be oldest-first."""
         sent = data.setdefault("sent_shortcodes", [])
         for post in posts:
             sc = post["shortcode"]
@@ -167,7 +146,6 @@ class Instagram(commands.Cog):
                 await channel.send(embed=embed)
                 sent.append(sc)
                 _save_data(data)
-                # Small delay to avoid rate limits
                 await asyncio.sleep(1)
             except discord.HTTPException as e:
                 logger.error("Erreur envoi post Instagram %s: %s", sc, e)
@@ -181,21 +159,16 @@ class Instagram(commands.Cog):
 
         data = _load_data()
         is_first_run = not data.get("sent_shortcodes")
-
         fetch_count = BACKFILL_COUNT if is_first_run else 5
-        posts = await asyncio.get_event_loop().run_in_executor(
-            None, _fetch_posts, fetch_count
-        )
+
+        posts = await asyncio.get_event_loop().run_in_executor(None, _fetch_posts, fetch_count)
         if not posts:
             return
 
-        # posts from instaloader are newest-first → reverse for chronological send
         posts_to_send = list(reversed(posts))
-
         sent_before = len(data.get("sent_shortcodes", []))
         await self._send_posts(channel, posts_to_send, data)
         sent_after = len(data.get("sent_shortcodes", []))
-
         new_count = sent_after - sent_before
         if new_count:
             logger.info("Instagram: %d nouveau(x) post(s) envoyés", new_count)
@@ -204,7 +177,6 @@ class Instagram(commands.Cog):
     async def before_poll(self):
         await self.bot.wait_until_ready()
 
-    # Admin command to manually trigger a backfill
     @app_commands.command(name="instagram_sync", description="[Admin] Synchronise les derniers posts Instagram")
     @app_commands.default_permissions(administrator=True)
     async def instagram_sync(self, interaction: discord.Interaction, nombre: int = BACKFILL_COUNT):
